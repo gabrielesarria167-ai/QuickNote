@@ -41,6 +41,7 @@ struct NotesListView: View {
             Group {
                 if let selectedNote {
                     NoteEditorView(note: selectedNote)
+                        .id(selectedNote.id)
                 } else {
                     ContentUnavailableView(
                         "No Note Selected",

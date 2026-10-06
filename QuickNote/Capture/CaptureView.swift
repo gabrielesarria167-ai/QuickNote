@@ -19,20 +19,17 @@ final class CaptureDraft {
 
 struct CaptureView: View {
     @Bindable var draft: CaptureDraft
-    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextEditor(text: $draft.text)
-                .font(.system(size: 16))
-                .scrollContentBackground(.hidden)
-                .focused($isFocused)
+            FormattedTextEditor(text: $draft.text, fontSize: 16, focusToken: draft.session)
                 .overlay(alignment: .topLeading) {
                     if draft.text.isEmpty {
                         Text("What's the idea?")
                             .font(.system(size: 16))
                             .foregroundStyle(.tertiary)
                             .padding(.leading, 5)
+                            .padding(.top, 2)
                             .allowsHitTesting(false)
                     }
                 }
@@ -41,16 +38,14 @@ struct CaptureView: View {
                 Text(draft.caption)
                     .monospacedDigit()
                 Spacer()
-                Text(draft.canBrowse ? ". and - for older · esc or ⌘↩ save" : "esc or ⌘↩ save")
+                Text(draft.canBrowse ? "select text to style · . and - for older · esc saves" : "select text to style · esc saves")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         .padding(.top, 30)
         .padding([.horizontal, .bottom], 16)
-        .frame(minWidth: 420, minHeight: 180)
+        .frame(minWidth: 460, minHeight: 240)
         .background(.regularMaterial)
-        .onAppear { isFocused = true }
-        .onChange(of: draft.session) { isFocused = true }
     }
 }

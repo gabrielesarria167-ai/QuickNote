@@ -14,6 +14,19 @@ them in place. After the oldest note it wraps around to the new one, and whateve
 Neither character is typed when you press them together. Typed on their own, `.` and `-` work as usual: each is held
 back for 70 ms to see whether the other key joins it, too short to notice.
 
+### Formatting
+Notes are plain Markdown, shown styled as you type. The marks fade away except on the line you're editing.
+
+| Type | Or select text and use the toolbar | Shortcut |
+| --- | --- | --- |
+| `# Title` | Title | |
+| `- item` | List | |
+| `[ ] to-do` (click the box to tick it) | To-do | |
+| `**bold**` | Bold | ⌘B |
+| `_italic_` or `*italic*` | Italic | ⌘I |
+| `~~strike~~` | Strikethrough | ⇧⌘X |
+| `==highlight==` | Highlight | ⇧⌘H |
+
 Browse and edit all notes in the main window (Dock icon, or the 💡 menu bar icon → *Open QuickNote*).
 
 ## Install
@@ -90,6 +103,7 @@ The app icon is drawn in `scripts/icon.svg`; `swift scripts/make_icon.swift` ren
 | Global/local key listeners | `QuickNote/Hotkey/HotkeyMonitor.swift` |
 | `.` + `-` chord detection (pure, unit tested) | `QuickNote/Hotkey/KeyChordDetector.swift` |
 | Floating capture panel + note rotation | `QuickNote/Capture/` |
+| Markdown parser (pure, unit tested), styled editor, selection toolbar | `QuickNote/Editor/` |
 | Notes list + editor | `QuickNote/Main/` |
 | SwiftData model | `QuickNote/Model/Note.swift` |
 

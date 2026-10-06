@@ -27,9 +27,10 @@ final class Note {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Non-empty lines with their Markdown marks removed.
     private var lines: [String] {
         text.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { MarkdownParser.plainText(String($0)).trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
 }
