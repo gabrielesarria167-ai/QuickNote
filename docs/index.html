@@ -8,42 +8,49 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,400..900&family=Fragment+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Courier+Prime:wght@400;700&display=swap">
 <style>
 :root {
-  --page: #f2f4f7;
-  --ink: #15181e;
-  --muted: #586172;
-  --line: #d7dce4;
-  --paper: #ffd84a;
-  --paper-deep: #e9b520;
-  --desk: #7f93ad;
-  --desk-shade: #6c809b;
-  --window: #fbfcfd;
-  --window-line: #e3e7ed;
-  --panel: rgba(250, 251, 253, .9);
-  --panel-edge: rgba(20, 24, 30, .14);
-  --key: #ffffff;
-  --key-edge: #c5ccd7;
-  --f-sans: "Mona Sans", "Helvetica Neue", Arial, sans-serif;
-  --f-mono: "Fragment Mono", ui-monospace, Menlo, monospace;
-  --f-sys: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  /* the desk */
+  --desk: #d6dfe9;
+  --ink: #1f2633;
+  --muted: #4b5567;
+  --link: #1f3f8f;
+  --line: #b4c1d2;
+  --pool: none;
+  /* the cards: paper looks the same in any light */
+  --paper: #fffffd;
+  --paper-ink: #22304a;
+  --paper-title: #1d2b4a;
+  --paper-muted: #586273;
+  --paper-link: #1f3f8f;
+  --rule: #b8cde6;
+  --margin: #e0625c;
+  --stamp: #c8443e;
+  --ribbon-red: #b8322c;
+  --yellow: #ffe27a;
+  --yellow-ink: #2f2606;
+  --yellow-muted: #4a3d0c;
+  --yellow-rule: rgba(150, 110, 0, .28);
+  --yellow-edge: #d4a514;
+  --blue: #eef4fb;
+  --card-shadow: 0 28px 60px -30px rgba(31, 38, 51, .6), 0 0 0 1px rgba(31, 38, 51, .06);
+  --f-ui: "Atkinson Hyperlegible", "Helvetica Neue", Arial, sans-serif;
+  --f-type: "Courier Prime", Courier, monospace;
   color-scheme: light;
 }
+/* At night the cards sit under a desk lamp. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --page: #14161b;
-    --ink: #edf0f4;
-    --muted: #9ba4b2;
-    --line: #2b3039;
-    --desk: #2f3a4b;
-    --desk-shade: #273140;
-    --window: #1f2229;
-    --window-line: #2f343d;
-    --panel: rgba(40, 43, 51, .9);
-    --panel-edge: rgba(255, 255, 255, .12);
-    --key: #262a32;
-    --key-edge: #3b414c;
+    --desk: #152036;
+    --ink: #e6ecf5;
+    --muted: #a6b4c9;
+    --link: #ffd27a;
+    --line: #2c3a55;
+    --pool: radial-gradient(900px 700px at 36% 360px, rgba(255, 205, 120, .26), rgba(255, 205, 120, 0) 70%);
+    --paper: #fffaf0;
+    --blue: #e7eef8;
+    --card-shadow: 0 40px 80px -30px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 220, 160, .22);
     color-scheme: dark;
   }
 }
@@ -52,232 +59,175 @@
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  background: var(--page);
+  background: var(--pool), var(--desk);
+  background-repeat: no-repeat;
   color: var(--ink);
-  font-family: var(--f-sans);
-  font-size: 17px;
-  line-height: 1.55;
+  font: 17px/1.55 var(--f-ui);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
-a { color: inherit; text-underline-offset: .2em; text-decoration-thickness: 1px; }
-a:hover { text-decoration-thickness: 2px; }
-:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
+a { color: var(--link); text-underline-offset: .2em; }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.wrap { width: min(1200px, 100% - 32px); margin-inline: auto; }
 
-.wrap { width: min(1160px, 100% - 32px); margin-inline: auto; }
+/* ── header & footer ─────────────────────────────────── */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 24px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 700; font-size: 19px; text-decoration: none; }
+.brand img { width: 36px; height: 36px; }
+.top nav a { font-size: 15px; }
+.foot { padding-block: 32px 48px; text-align: center; font-size: 14px; color: var(--muted); }
+.foot p { margin: 0; }
 
-/* ── header ─────────────────────────────────────────── */
-.top { display: flex; align-items: center; justify-content: space-between; padding-block: 22px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-stretch: 110%; text-decoration: none; }
-.brand img { width: 34px; height: 34px; }
-.top nav a { color: var(--muted); text-decoration: none; font-size: 15px; }
-.top nav a:hover { color: var(--ink); }
+/* ── the cards ───────────────────────────────────────── */
+.spread { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 40px 0; padding-block: 56px 24px; }
+.card {
+  position: relative;
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--paper-ink);
+  box-shadow: var(--card-shadow);
+}
+.card a { color: var(--paper-link); }
+.card :focus-visible { outline-color: var(--paper-title); }
+.card-head {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--margin);
+  font: 15px/1.4 var(--f-type);
+  color: var(--paper-muted);
+}
+.hole {
+  position: absolute; left: 50%; bottom: 22px;
+  width: 22px; height: 22px; margin-left: -11px;
+  border-radius: 50%;
+  background: var(--desk);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, .3);
+}
 
-/* ── hero ───────────────────────────────────────────── */
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 48px;
-  padding-block: 40px 88px;
-  align-items: center;
+.main-card {
+  z-index: 2;
+  flex: 1 1 620px; min-width: 0;
+  padding: 26px clamp(22px, 4.5vw, 52px) 64px;
+  rotate: -1deg;
 }
-@media (min-width: 980px) {
-  .hero { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 64px; padding-block: 56px 112px; }
+.typed {
+  margin-top: 22px;
+  font-family: var(--f-type);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 39px, var(--rule) 39px 40px);
 }
-h1 {
-  margin: 0 0 22px;
-  font-size: clamp(44px, 6.4vw, 84px);
-  line-height: .95;
-  font-weight: 850;
-  font-stretch: 125%;
-  letter-spacing: -.035em;
-  text-wrap: balance;
-}
-.lede { margin: 0 0 32px; max-width: 34em; font-size: 19px; color: var(--muted); }
-.lede kbd { font-family: var(--f-sans); font-weight: 650; color: var(--ink); white-space: nowrap; }
+.typed .ln { min-height: 40px; line-height: 40px; font-size: 19px; }
+.typed .title { font-size: clamp(26px, 3.8vw, 44px); font-weight: 700; color: var(--paper-title); }
+.typed .red { color: var(--ribbon-red); }
+.typed .code { font-size: 16px; color: var(--paper-title); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+.typed .code::-webkit-scrollbar { display: none; }
+.caret { display: inline-block; width: .6em; height: 1.05em; margin-left: 1px; vertical-align: -.15em; background: var(--paper-title); opacity: .75; }
 
-.get { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: 34rem; }
-.cmd {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 10px 10px 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--window);
+.card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin-top: 24px; }
+.card-actions span { flex: 1 1 220px; font-size: 15px; color: var(--paper-muted); }
+.stamp {
+  min-height: 48px; padding: 6px 22px;
+  border: 2.5px solid var(--stamp); border-radius: 8px;
+  background: transparent; color: var(--stamp);
+  font: 700 20px/1 var(--f-type);
+  rotate: -3deg;
+  cursor: pointer;
+  transition: scale .12s;
 }
-.cmd code {
-  flex: 1; min-width: 0;
-  overflow-x: auto; white-space: nowrap; scrollbar-width: none;
-  font-family: var(--f-mono); font-size: 14px;
-}
-.cmd code::-webkit-scrollbar { display: none; }
-.cmd button, .button {
-  flex: none;
-  font: 600 15px/1 var(--f-sans);
-  border-radius: 9px;
+.stamp:active { scale: .94; }
+.retype {
+  min-height: 44px; padding: 0 4px; border: 0;
+  background: transparent; color: var(--paper-muted);
+  font: 14px var(--f-ui); text-decoration: underline; text-underline-offset: .2em;
   cursor: pointer;
 }
-.cmd button { padding: 10px 14px; border: 0; background: var(--ink); color: var(--page); }
-.get-note { margin: 0; font-size: 14px; color: var(--muted); }
-.get-note a { color: var(--ink); }
 
-/* ── the desk (interactive demo) ────────────────────── */
-.demo { display: grid; gap: 18px; }
-.desk {
-  container-type: inline-size;
-  position: relative;
-  aspect-ratio: 16 / 11;
-  border-radius: 14px;
-  overflow: hidden;
-  background:
-    radial-gradient(120% 90% at 85% 110%, var(--desk-shade) 0 45%, transparent 45.2%),
-    var(--desk);
-  box-shadow: 0 1px 0 rgba(255,255,255,.4) inset, 0 30px 60px -30px rgba(20, 30, 50, .45);
-  font-family: var(--f-sys);
-  user-select: none;
+.side { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; margin-left: -28px; }
+.side .card { padding: 24px 30px 30px; }
+.side h2 {
+  margin: 0 0 12px; padding-bottom: 10px;
+  font: 700 24px/1.2 var(--f-type);
 }
-.menubar {
-  display: flex; align-items: center; gap: 2.2cqw;
-  height: 4.6cqw; padding-inline: 2.2cqw;
-  background: rgba(255, 255, 255, .28);
-  backdrop-filter: blur(12px);
-  font-size: 1.9cqw; font-weight: 600; color: #0e1116;
+.side .lines { margin: 0; font: 17px/32px var(--f-type); }
+.side .lines p { margin: 0; }
+.side ol.lines { padding-left: 1.4em; }
+.side .after { margin: 14px 0 0; font-size: 15px; line-height: 1.55; }
+.side code { font-family: var(--f-type); white-space: nowrap; }
+.how {
+  z-index: 3; margin-top: 18px; rotate: 3deg;
+  background: var(--yellow); color: var(--yellow-ink);
+  box-shadow: 0 24px 50px -28px rgba(60, 45, 0, .55);
 }
-.menubar .spacer { flex: 1; }
-.menubar img { width: 2.6cqw; height: 2.6cqw; }
-.menubar span:not(.spacer) { opacity: .85; font-weight: 500; }
-.menubar span:first-child { font-weight: 700; opacity: 1; }
+.how h2 { border-bottom: 2px solid var(--yellow-edge); }
+.how .lines { background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--yellow-rule) 31px 32px); }
+.how .after { color: var(--yellow-muted); }
+.before { z-index: 1; margin: -12px 0 0 34px; rotate: -2.5deg; background: var(--blue); }
+.before h2 { color: var(--paper-title); border-bottom: 2px solid var(--margin); }
+.before .lines { background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--rule) 31px 32px); }
+.before .after { color: var(--paper-muted); }
 
-.doc {
-  position: absolute; left: 7%; top: 13%; width: 70%; height: 74%;
-  background: var(--window);
-  border-radius: 1.4cqw;
-  box-shadow: 0 2cqw 5cqw -2cqw rgba(10, 20, 40, .45), 0 0 0 1px rgba(0,0,0,.08);
-  overflow: hidden;
+@media (max-width: 1040px) {
+  .side { margin-left: 0; }
+  .main-card { rotate: 0deg; }
+  .how { rotate: 1.5deg; }
+  .before { margin: -8px 0 0 16px; rotate: -1.5deg; }
 }
-.doc-bar {
-  display: flex; align-items: center; gap: .9cqw;
-  height: 4.4cqw; padding-inline: 1.6cqw;
-  border-bottom: 1px solid var(--window-line);
-  font-size: 1.6cqw; color: var(--muted);
-}
-.doc-bar i { width: 1.2cqw; height: 1.2cqw; border-radius: 50%; background: #ff5f57; }
-.doc-bar i:nth-child(2) { background: #febc2e; }
-.doc-bar i:nth-child(3) { background: #28c840; margin-right: 1.4cqw; }
-.doc-body { padding: 2.4cqw 3cqw; font-size: 1.75cqw; line-height: 1.6; color: var(--ink); }
-.doc-body p { margin: 0 0 1.2cqw; }
-.doc-body .caret { display: inline-block; width: .18cqw; height: 2cqw; vertical-align: -.35cqw; background: var(--ink); animation: blink 1.1s steps(1) infinite; }
-@keyframes blink { 50% { opacity: 0; } }
 
-.panel {
-  position: absolute; left: 50%; top: 24%;
-  width: 66%;
-  translate: -50% 0;
-  padding: 4.6cqw 2.6cqw 2cqw;
-  border-radius: 2cqw;
-  background: var(--panel);
-  backdrop-filter: blur(24px) saturate(1.4);
-  box-shadow: 0 0 0 1px var(--panel-edge), 0 3cqw 7cqw -2cqw rgba(5, 10, 25, .55);
-  opacity: 0; scale: .96;
-  visibility: hidden;
-  transition: opacity .16s ease-out, scale .16s ease-out, visibility 0s linear .16s;
-}
-.panel.open { opacity: 1; scale: 1; visibility: visible; transition: opacity .16s ease-out, scale .16s ease-out; }
-.panel textarea {
-  display: block; width: 100%; height: 13cqw;
-  padding: 0; border: 0; resize: none; outline: none;
-  background: transparent; color: var(--ink);
-  font: 2.3cqw/1.45 var(--f-sys);
-  user-select: text;
-}
-.panel textarea::placeholder { color: color-mix(in srgb, var(--ink) 35%, transparent); }
-.panel footer {
-  display: flex; align-items: center; justify-content: space-between; gap: 2cqw;
-  margin-top: 1.4cqw;
-  font-size: 1.5cqw; color: var(--muted);
-}
-.panel footer .acts { display: flex; gap: 1cqw; }
-.panel footer button {
-  padding: .7cqw 1.4cqw;
-  border: 1px solid var(--panel-edge); border-radius: 1cqw;
-  background: transparent; color: var(--muted);
-  font: 500 1.5cqw/1 var(--f-sys); cursor: pointer;
-}
-.panel footer button:hover { color: var(--ink); }
-
-.toast {
-  position: absolute; right: 3%; top: 8%;
-  display: flex; align-items: center; gap: 1.2cqw;
-  padding: 1.2cqw 1.8cqw;
-  border-radius: 1.6cqw;
-  background: var(--panel);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 0 0 1px var(--panel-edge), 0 2cqw 4cqw -2cqw rgba(5, 10, 25, .5);
-  font-size: 1.6cqw; color: var(--ink);
-  max-width: 44%;
-  opacity: 0; translate: 0 -1cqw;
-  transition: opacity .2s, translate .2s;
-}
-.toast.show { opacity: 1; translate: 0 0; }
-.toast .sheet { flex: none; width: 2.6cqw; height: 2.6cqw; border-radius: .5cqw; background: var(--paper); }
-.toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.try {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
-  margin: 0; font-size: 15px; color: var(--muted);
-}
-.chord {
-  display: inline-flex; gap: 8px;
-  padding: 0; border: 0; background: none; cursor: pointer;
-  border-radius: 12px;
-}
+/* ── try it ──────────────────────────────────────────── */
+.try { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-block: 0; padding-block: 24px 56px; font-size: 15px; color: var(--muted); }
+.chord { display: inline-flex; gap: 8px; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 10px; }
 .chord kbd {
   display: grid; place-items: center;
-  min-width: 58px; height: 52px; padding: 0 12px;
-  border: 1px solid var(--key-edge);
-  border-bottom-width: 4px;
-  border-radius: 10px;
-  background: var(--key);
-  color: var(--ink);
-  font: 600 22px/1 var(--f-sys);
-  transition: background .08s, translate .08s, border-bottom-width .08s;
+  min-width: 52px; height: 48px; padding: 0 12px;
+  border: 1px solid var(--line); border-bottom-width: 4px; border-radius: 9px;
+  background: var(--paper); color: var(--paper-title);
+  font: 700 20px/1 var(--f-type);
+  transition: translate .08s, border-bottom-width .08s, background .08s;
 }
-.chord kbd small { display: block; margin-top: 3px; font-size: 10px; font-weight: 500; color: var(--muted); }
-.chord kbd.down { background: var(--paper); border-color: var(--paper-deep); color: #15181e; translate: 0 2px; border-bottom-width: 2px; }
-.chord kbd.down small { color: #5a4a10; }
+.chord kbd.down { background: var(--yellow); border-color: var(--yellow-edge); color: var(--yellow-ink); translate: 0 2px; border-bottom-width: 2px; }
 
-/* ── sections ───────────────────────────────────────── */
-section { padding-block: 72px; border-top: 1px solid var(--line); }
-h2 {
-  margin: 0 0 28px;
-  font-size: clamp(28px, 3.4vw, 40px);
-  line-height: 1.05;
-  font-weight: 800;
-  font-stretch: 115%;
-  letter-spacing: -.02em;
+/* ── the capture card ────────────────────────────────── */
+.scrim { position: fixed; inset: 0; z-index: 10; background: rgba(15, 22, 38, .35); }
+.capture {
+  position: fixed; z-index: 11;
+  left: 50%; top: 16vh;
+  width: min(620px, 100% - 32px);
+  translate: -50% 0;
+  padding: 22px clamp(18px, 4vw, 36px) 20px;
+  animation: drop .22s ease-out;
 }
-.steps { display: grid; gap: 28px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
-@media (min-width: 820px) { .steps { grid-template-columns: repeat(3, 1fr); gap: 40px; } }
-.steps li { counter-increment: step; max-width: 30em; }
-.steps li::before {
-  content: counter(step);
-  display: grid; place-items: center;
-  width: 34px; height: 34px; margin-bottom: 14px;
-  border-radius: 50%;
-  background: var(--paper); color: #15181e;
-  font-weight: 800; font-size: 16px;
+.capture[hidden], .scrim[hidden] { display: none; }
+@keyframes drop { from { opacity: 0; translate: -50% -14px; rotate: -2deg; } }
+.capture textarea {
+  display: block; width: 100%; height: 160px; margin-top: 10px;
+  padding: 0; border: 0; resize: none; outline: none;
+  background: repeating-linear-gradient(to bottom, transparent 0 31px, var(--rule) 31px 32px) local;
+  color: var(--paper-title);
+  font: 18px/32px var(--f-type);
 }
-.steps h3, .facts dt { margin: 0 0 6px; font-size: 19px; font-weight: 700; font-stretch: 105%; }
-.steps p, .facts dd { margin: 0; color: var(--muted); }
-kbd { font-family: var(--f-sys); font-size: .95em; }
-
-.split { display: grid; gap: 28px; }
-@media (min-width: 820px) { .split { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 64px; } }
-.split h2 { margin-bottom: 0; }
-.facts { display: grid; gap: 26px; margin: 0; }
-.facts dd { max-width: 40em; }
-.facts code { font-family: var(--f-mono); font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
-
-.foot { padding-block: 40px 56px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
-.foot p { margin: 0; }
+.capture textarea::placeholder { color: var(--paper-muted); opacity: .7; }
+.capture-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.capture-actions button {
+  min-height: 44px; padding: 0 16px;
+  border: 1px solid var(--rule); border-radius: 9px;
+  background: transparent; color: var(--paper-title);
+  font: 700 15px var(--f-ui); cursor: pointer;
+}
+.capture-actions kbd { margin-left: 6px; font: 400 13px var(--f-ui); color: var(--paper-muted); }
+.toast {
+  position: fixed; z-index: 12; left: 50%; bottom: 28px;
+  max-width: min(520px, 100% - 32px);
+  translate: -50% 0;
+  padding: 12px 18px;
+  border-radius: 8px;
+  background: var(--yellow); color: var(--yellow-ink);
+  box-shadow: 0 20px 40px -20px rgba(0, 0, 0, .5);
+  font: 16px/1.4 var(--f-type);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  opacity: 0; transition: opacity .2s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; animation: none !important; }
@@ -291,226 +241,219 @@ kbd { font-family: var(--f-sys); font-size: .95em; }
 </header>
 
 <main>
-  <div class="wrap hero">
-    <div>
-      <h1>Write the idea down before it’s gone.</h1>
-      <p class="lede">QuickNote is a tiny Mac app for the moment an idea shows up. Tap <kbd>⌃ Control</kbd> and <kbd>⌥ Option</kbd> together, in any app, and a small panel opens on top. Type, press <kbd>esc</kbd>, and you’re back where you were.</p>
-      <div class="get">
-        <div class="cmd">
-          <code id="cmd">curl -fsSL https://gabrielesarria167-ai.github.io/QuickNote/install.sh | bash</code>
-          <button type="button" id="copy">Copy</button>
-        </div>
-        <p class="get-note">Paste it into Terminal to install. Or <a href="https://github.com/gabrielesarria167-ai/QuickNote/releases/latest/download/QuickNote.dmg">download the disk image</a>. Free, for macOS 15 or later on Apple Silicon and Intel.</p>
+  <div class="wrap spread">
+    <article class="card main-card" aria-labelledby="title">
+      <div class="card-head"><span>QuickNote</span></div>
+      <div class="sr-only">
+        <h1 id="title">Write the idea down before it’s gone.</h1>
+        <p>A small Mac app for the moment an idea shows up. To install, paste this into Terminal:</p>
+        <code>curl -fsSL https://gabrielesarria167-ai.github.io/QuickNote/install.sh | bash</code>
       </div>
-    </div>
+      <div class="typed" id="typed" aria-hidden="true">
+        <div class="ln title">Write the idea down</div>
+        <div class="ln title">before it’s gone.</div>
+        <div class="ln"></div>
+        <div class="ln">A small Mac app for the moment an idea shows up.</div>
+        <div class="ln"></div>
+        <div class="ln red">To install, paste into Terminal:</div>
+        <div class="ln code">curl -fsSL https://gabrielesarria167-ai.github.io/QuickNote/install.sh | bash</div>
+      </div>
+      <div class="card-actions">
+        <button type="button" class="stamp" id="copy">Copy</button>
+        <span>Or <a href="https://github.com/gabrielesarria167-ai/QuickNote/releases/latest/download/QuickNote.dmg">download the disk image</a>. Free, for macOS 15 or later on Apple Silicon and Intel.</span>
+        <button type="button" class="retype" id="retype">Type it again</button>
+      </div>
+      <div class="hole" aria-hidden="true"></div>
+    </article>
 
-    <div class="demo">
-      <div class="desk" id="desk">
-        <div class="menubar" aria-hidden="true">
-          <span>Pages</span><span>File</span><span>Edit</span><span>View</span>
-          <span class="spacer"></span>
-          <img src="icon.svg" alt=""><span id="clock">9:41</span>
+    <div class="side">
+      <article class="card how">
+        <h2>How it works</h2>
+        <ol class="lines">
+          <li>Tap ⌃ Control + ⌥ Option, in any app.</li>
+          <li>Type the idea in the panel on top.</li>
+          <li>Press esc. You’re back where you were.</li>
+        </ol>
+        <p class="after">Tap right ⇧ in the panel to flip back through earlier notes. Shortcuts that use ⌃⌥ with another key keep working.</p>
+      </article>
+      <article class="card before">
+        <h2>Before you install</h2>
+        <div class="lines">
+          <p>Allow it once in Accessibility.</p>
+          <p>Notes stay on your Mac.</p>
+          <p>Not notarized: use the command.</p>
         </div>
-        <div class="doc" aria-hidden="true">
-          <div class="doc-bar"><i></i><i></i><i></i>Quarterly report.pages</div>
-          <div class="doc-body">
-            <p>Revenue grew in every region except the north, where two stores closed for renovation in May.</p>
-            <p>Next quarter we expect the reopened stores to recover most of the gap<span class="caret"></span></p>
-          </div>
-        </div>
-        <div class="panel" id="panel" role="dialog" aria-label="QuickNote capture panel">
-          <textarea id="text" placeholder="What’s the idea?" aria-label="Note text"></textarea>
-          <footer>
-            <span id="caption">New note</span>
-            <span class="acts">
-              <button type="button" id="older">Older <span aria-hidden="true">· right ⇧</span></button>
-              <button type="button" id="save">Save <span aria-hidden="true">· esc</span></button>
-            </span>
-          </footer>
-        </div>
-        <div class="toast" id="toast" role="status" aria-live="polite"><i class="sheet"></i><span id="toast-text"></span></div>
-      </div>
-      <p class="try">
-        <button type="button" class="chord" id="chord" aria-label="Open the capture panel (like tapping Control and Option together)">
-          <kbd id="k-ctrl">⌃<small>control</small></kbd><kbd id="k-opt">⌥<small>option</small></kbd>
-        </button>
-        <span>Try it here: tap both keys together, or click them.</span>
-      </p>
+        <p class="after">macOS asks for Accessibility access so QuickNote can notice ⌃⌥ in other apps; it doesn’t record anything you type. The disk image needs Open Anyway in Privacy &amp; Security the first time. To remove the app, add <code>-s -- --uninstall</code> after <code>bash</code>; your notes are kept.</p>
+      </article>
     </div>
   </div>
 
-  <section>
-    <div class="wrap">
-      <h2>How it works</h2>
-      <ol class="steps">
-        <li>
-          <h3>Tap ⌃⌥</h3>
-          <p>Press Control and Option together and let go, from whatever you’re doing. Shortcuts that use ⌃⌥ with another key keep working as before.</p>
-        </li>
-        <li>
-          <h3>Type the idea</h3>
-          <p>A small panel opens on top of your work, ready to type. The app you were in stays where it is.</p>
-        </li>
-        <li>
-          <h3>Press esc</h3>
-          <p>The note is saved and you’re back in your app. Tap right ⇧ in the panel to flip back through earlier notes and add to them.</p>
-        </li>
-      </ol>
-    </div>
-  </section>
-
-  <section>
-    <div class="wrap split">
-      <h2>Before you install</h2>
-      <dl class="facts">
-        <div>
-          <dt>It needs Accessibility access</dt>
-          <dd>macOS only lets an app notice keys pressed in other apps once you allow it under System Settings › Privacy &amp; Security › Accessibility. QuickNote asks the first time it opens. It only watches for ⌃⌥: it doesn’t record or store what you type anywhere else, and every key still reaches your app.</dd>
-        </div>
-        <div>
-          <dt>Your notes stay on your Mac</dt>
-          <dd>Nothing is uploaded. Notes are saved in <code>~/Library/Application Support/com.gabrielesarria.quicknote</code>, and the main window lets you search, edit and delete them.</dd>
-        </div>
-        <div>
-          <dt>It isn’t notarized by Apple</dt>
-          <dd>The Terminal command installs it without warnings. If you use the disk image, the first launch needs System Settings › Privacy &amp; Security › <strong>Open Anyway</strong>.</dd>
-        </div>
-        <div>
-          <dt>Updating and uninstalling</dt>
-          <dd>Run the install command again to update; your notes and the Accessibility setting are kept. To remove the app: <code>curl -fsSL https://gabrielesarria167-ai.github.io/QuickNote/install.sh | bash -s -- --uninstall</code></dd>
-        </div>
-      </dl>
-    </div>
-  </section>
+  <p class="wrap try">
+    <button type="button" class="chord" id="chord" aria-label="Open a blank card, like tapping Control and Option together">
+      <kbd id="k-ctrl">⌃</kbd><kbd id="k-opt">⌥</kbd>
+    </button>
+    <span>Try it here: tap ⌃ and ⌥ together, or click them.</span>
+  </p>
 </main>
 
 <footer class="wrap foot">
-  <p>QuickNote is free and open source. <a href="https://github.com/gabrielesarria167-ai/QuickNote">Source, issues and releases on GitHub</a>.</p>
+  <p>Free and open source. <a href="https://github.com/gabrielesarria167-ai/QuickNote">Releases and source on GitHub</a>.</p>
 </footer>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="card capture" id="capture" role="dialog" aria-label="New note" hidden>
+  <div class="card-head"><span id="caption">New card</span><span>esc saves</span></div>
+  <textarea id="text" placeholder="What’s the idea?" aria-label="Note text"></textarea>
+  <div class="capture-actions">
+    <button type="button" id="older">Older card<kbd>right ⇧</kbd></button>
+    <button type="button" id="save">Save<kbd>esc</kbd></button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 (() => {
-  const panel = document.getElementById('panel');
+  const COMMAND = 'curl -fsSL https://gabrielesarria167-ai.github.io/QuickNote/install.sh | bash';
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── the card types itself ────────────────────────────
+  const typed = document.getElementById('typed');
+  const lines = [...typed.querySelectorAll('.ln')];
+  const texts = lines.map((l) => l.textContent);
+  const caret = document.createElement('span');
+  caret.className = 'caret';
+  let timer;
+
+  function typeOut() {
+    clearInterval(timer);
+    typed.style.minHeight = typed.offsetHeight + 'px';   // keep the cards still while typing
+    lines.forEach((l) => { l.textContent = ''; });
+    let line = 0, ch = 0;
+    timer = setInterval(() => {
+      if (line >= lines.length) {
+        clearInterval(timer);
+        lines[lines.length - 1].append(caret);
+        return;
+      }
+      ch++;
+      lines[line].textContent = texts[line].slice(0, ch);
+      lines[line].append(caret);
+      if (ch >= texts[line].length) { line++; ch = 0; }
+    }, 26);
+  }
+  if (!still) typeOut();
+  else lines[lines.length - 1].append(caret);
+  document.getElementById('retype').addEventListener('click', typeOut);
+
+  // ── copy stamp ───────────────────────────────────────
+  const copy = document.getElementById('copy');
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(COMMAND);
+      copy.textContent = 'Copied';
+    } catch {
+      copy.textContent = 'Press ⌘C';
+      getSelection().selectAllChildren(lines[lines.length - 1]);
+    }
+    setTimeout(() => { copy.textContent = 'Copy'; }, 2200);
+  });
+
+  // ── try it: the capture card ─────────────────────────
+  const capture = document.getElementById('capture');
+  const scrim = document.getElementById('scrim');
   const text = document.getElementById('text');
   const caption = document.getElementById('caption');
   const toast = document.getElementById('toast');
-  const toastText = document.getElementById('toast-text');
   const kCtrl = document.getElementById('k-ctrl');
   const kOpt = document.getElementById('k-opt');
-
   // Pretend these were written earlier, oldest first.
   const notes = [
     { text: 'Podcast: one question, asked to ten strangers', at: Date.now() - 3 * 864e5 },
     { text: 'Bike rack that folds flat against the wall', at: Date.now() - 5 * 36e5 },
   ];
-  let position = 0;        // 0 is the new note; n is the nth newest saved note
-  let newNoteText = '';
-  let toastTimer;
-
+  let position = 0, newText = '', toastTimer, opener = null;
+  const isOpen = () => !capture.hidden;
+  const noteAt = (p) => notes[notes.length - p];
   const ago = (t) => {
     const mins = Math.round((Date.now() - t) / 6e4);
     if (mins < 1) return 'just now';
     if (mins < 60) return `${mins} min ago`;
     const hours = Math.round(mins / 60);
-    if (hours < 24) return `${hours} hours ago`;
-    return `${Math.round(hours / 24)} days ago`;
+    return hours < 24 ? `${hours} hours ago` : `${Math.round(hours / 24)} days ago`;
   };
-  const noteAt = (p) => notes[notes.length - p];
-
   function showCaption() {
     caption.textContent = position === 0
-      ? 'New note'
-      : `Note ${notes.length - position + 1} of ${notes.length} · ${ago(noteAt(position).at)}`;
+      ? 'New card'
+      : `Card ${notes.length - position + 1} of ${notes.length}, ${ago(noteAt(position).at)}`;
   }
   function stash() {
-    if (position === 0) newNoteText = text.value;
+    if (position === 0) newText = text.value;
     else noteAt(position).text = text.value;
   }
   function open() {
-    position = 0; newNoteText = ''; text.value = '';
+    opener = document.activeElement;
+    position = 0; newText = ''; text.value = '';
     showCaption();
-    panel.classList.add('open');
+    capture.hidden = false; scrim.hidden = false;
     text.focus({ preventScroll: true });
   }
   function save() {
-    if (!panel.classList.contains('open')) return;
+    if (!isOpen()) return;
     stash();
-    const idea = newNoteText.trim();
     for (let i = notes.length - 1; i >= 0; i--) if (!notes[i].text.trim()) notes.splice(i, 1);
+    const idea = newText.trim();
     if (idea) {
       notes.push({ text: idea, at: Date.now() });
-      toastText.textContent = `Saved: ${idea}`;
+      toast.textContent = `Saved: ${idea}`;
       toast.classList.add('show');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
     }
-    panel.classList.remove('open');
-    text.blur();
+    capture.hidden = true; scrim.hidden = true;
+    if (opener && opener.focus) opener.focus({ preventScroll: true });
   }
   function older() {
     if (!notes.length) return;
     stash();
     position = (position + 1) % (notes.length + 1);
-    text.value = position === 0 ? newNoteText : noteAt(position).text;
+    text.value = position === 0 ? newText : noteAt(position).text;
     showCaption();
     text.focus({ preventScroll: true });
   }
-  const toggle = () => panel.classList.contains('open') ? save() : open();
+  const toggle = () => (isOpen() ? save() : open());
 
   document.getElementById('chord').addEventListener('click', toggle);
   document.getElementById('save').addEventListener('click', save);
   document.getElementById('older').addEventListener('click', older);
+  scrim.addEventListener('click', save);
 
-  // Same rules as the app: ⌃⌥ pressed together and released with nothing else in between.
-  let started = 0, reached = false, cancelled = false, rShiftDownAt = 0;
-  const held = (e) => ({ ctrl: e.ctrlKey, alt: e.altKey, other: e.shiftKey || e.metaKey });
-  function light(e) {
-    kCtrl.classList.toggle('down', e.ctrlKey);
-    kOpt.classList.toggle('down', e.altKey);
-  }
+  // Same rules as the app: ⌃⌥ pressed together and released with nothing else in between,
+  // and a quick tap of right ⇧ on its own.
+  let started = 0, reached = false, cancelled = false, rShiftAt = 0;
+  const light = (e) => { kCtrl.classList.toggle('down', e.ctrlKey); kOpt.classList.toggle('down', e.altKey); };
   document.addEventListener('keydown', (e) => {
     light(e);
     if (e.key === 'Control' || e.key === 'Alt') {
-      const h = held(e);
       if (!started) started = e.timeStamp;
-      if (h.ctrl && h.alt && !h.other) reached = true;
+      if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey) reached = true;
       return;
     }
-    if (e.code === 'ShiftRight') { rShiftDownAt = e.timeStamp; }
-    else rShiftDownAt = 0;
+    rShiftAt = e.code === 'ShiftRight' ? e.timeStamp : 0;
     if (started) cancelled = true;
-    if (!panel.classList.contains('open')) return;
-    if (e.key === 'Escape' || (e.key === 'Enter' && e.metaKey)) { e.preventDefault(); save(); }
+    if (isOpen() && (e.key === 'Escape' || (e.key === 'Enter' && e.metaKey))) { e.preventDefault(); save(); }
   });
   document.addEventListener('keyup', (e) => {
     light(e);
-    if (e.code === 'ShiftRight' && rShiftDownAt && e.timeStamp - rShiftDownAt < 400 && panel.classList.contains('open')) {
-      older();
+    if (e.code === 'ShiftRight') {
+      if (rShiftAt && e.timeStamp - rShiftAt < 400 && isOpen()) older();
+      rShiftAt = 0;
     }
-    if (e.code === 'ShiftRight') rShiftDownAt = 0;
-    if (!(e.key === 'Control' || e.key === 'Alt')) return;
-    if (e.ctrlKey || e.altKey) return;   // the other one is still held
+    if (!(e.key === 'Control' || e.key === 'Alt') || e.ctrlKey || e.altKey) return;
     const fire = started && reached && !cancelled && e.timeStamp - started < 800;
     started = 0; reached = false; cancelled = false;
     if (fire) toggle();
   });
-  window.addEventListener('blur', () => { started = 0; reached = false; kCtrl.classList.remove('down'); kOpt.classList.remove('down'); });
-
-  const clock = document.getElementById('clock');
-  const tick = () => clock.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  tick(); setInterval(tick, 3e4);
-
-  const copy = document.getElementById('copy');
-  copy.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(document.getElementById('cmd').textContent);
-      copy.textContent = 'Copied';
-    } catch {
-      getSelection().selectAllChildren(document.getElementById('cmd'));
-      copy.textContent = 'Press ⌘C';
-    }
-    setTimeout(() => copy.textContent = 'Copy', 2000);
-  });
+  addEventListener('blur', () => { started = 0; reached = false; kCtrl.classList.remove('down'); kOpt.classList.remove('down'); });
 })();
 </script>
 </body>
