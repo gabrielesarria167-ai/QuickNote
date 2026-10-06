@@ -2,8 +2,8 @@ import AppKit
 import SwiftData
 import SwiftUI
 
-/// Shows the capture panel, lets you flip back through older notes with
-/// right Shift, and saves everything when it closes.
+/// Shows the capture panel, lets you flip back through older notes by pressing
+/// `.` and `-` together, and saves everything when it closes.
 @MainActor
 final class CapturePanelController: NSObject, NSWindowDelegate {
     private let container: ModelContainer
@@ -22,7 +22,7 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(rootView: CaptureView(draft: draft))
         panel.delegate = self
         panel.onSubmit = { [weak self] in self?.commit() }
-        panel.onRightShiftTap = { [weak self] in self?.showNextOlderNote() }
+        panel.onFlip = { [weak self] in self?.showNextOlderNote() }
         return panel
     }()
 

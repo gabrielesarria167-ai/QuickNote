@@ -4,14 +4,15 @@ A small macOS app for catching ideas the moment they show up.
 Tap **⌃ Control + ⌥ Option** together, from any app, and a floating capture panel opens.
 Type the idea, press **esc** or **⌘↩**, and it's saved. The app you were in gets focus back.
 
-While the panel is open, tap **right Shift** to flip back through earlier notes (newest first), and edit them in place.
-After the oldest note it wraps around to the new one, and whatever you'd typed there is kept:
+While the panel is open, press **`.` and `-` together** to flip back through earlier notes (newest first), and edit
+them in place. After the oldest note it wraps around to the new one, and whatever you'd typed there is kept:
 
 ```
-⌃⌥ → New note → right ⇧ → Note 3 → right ⇧ → Note 2 → right ⇧ → Note 1 → right ⇧ → New note …
+⌃⌥ → New note → .- → Note 3 → .- → Note 2 → .- → Note 1 → .- → New note …
 ```
 
-Only a quick tap on its own counts: holding right Shift to type a capital letter never switches notes.
+Neither character is typed when you press them together. Typed on their own, `.` and `-` work as usual: each is held
+back for 70 ms to see whether the other key joins it, too short to notice.
 
 Browse and edit all notes in the main window (Dock icon, or the 💡 menu bar icon → *Open QuickNote*).
 
@@ -87,7 +88,7 @@ The app icon is drawn in `scripts/icon.svg`; `swift scripts/make_icon.swift` ren
 | --- | --- |
 | ⌃⌥ detection (pure, unit tested) | `QuickNote/Hotkey/ModifierChordDetector.swift` |
 | Global/local key listeners | `QuickNote/Hotkey/HotkeyMonitor.swift` |
-| Right-Shift tap detection (pure, unit tested) | `QuickNote/Hotkey/ModifierTapDetector.swift` |
+| `.` + `-` chord detection (pure, unit tested) | `QuickNote/Hotkey/KeyChordDetector.swift` |
 | Floating capture panel + note rotation | `QuickNote/Capture/` |
 | Notes list + editor | `QuickNote/Main/` |
 | SwiftData model | `QuickNote/Model/Note.swift` |

@@ -274,7 +274,7 @@ a { color: var(--link); text-underline-offset: .2em; }
           <li>Type the idea in the panel on top.</li>
           <li>Press esc. You’re back where you were.</li>
         </ol>
-        <p class="after">Tap right ⇧ in the panel to flip back through earlier notes. Shortcuts that use ⌃⌥ with another key keep working.</p>
+        <p class="after">Press <kbd>.</kbd> and <kbd>-</kbd> together in the panel to flip back through earlier notes. Shortcuts that use ⌃⌥ with another key keep working.</p>
       </article>
       <article class="card before">
         <h2>Before you install</h2>
@@ -305,7 +305,7 @@ a { color: var(--link); text-underline-offset: .2em; }
   <div class="card-head"><span id="caption">New card</span><span>esc saves</span></div>
   <textarea id="text" placeholder="What’s the idea?" aria-label="Note text"></textarea>
   <div class="capture-actions">
-    <button type="button" id="older">Older card<kbd>right ⇧</kbd></button>
+    <button type="button" id="older">Older card<kbd>. and -</kbd></button>
     <button type="button" id="save">Save<kbd>esc</kbd></button>
   </div>
 </div>
@@ -427,9 +427,36 @@ a { color: var(--link); text-underline-offset: .2em; }
   document.getElementById('older').addEventListener('click', older);
   scrim.addEventListener('click', save);
 
-  // Same rules as the app: ⌃⌥ pressed together and released with nothing else in between,
-  // and a quick tap of right ⇧ on its own.
-  let started = 0, reached = false, cancelled = false, rShiftAt = 0;
+  // Same rules as the app: ⌃⌥ pressed together and released with nothing else in between, and
+  // . and - pressed together in the card to flip back. A . or - is held back for 70 ms to see if
+  // the other key joins it; if not, it's typed as usual.
+  let started = 0, reached = false, cancelled = false;
+  let heldKey = null, heldTimer = 0, chordKeys = new Set();
+  const typeHeld = () => {
+    clearTimeout(heldTimer);
+    if (heldKey) text.setRangeText(heldKey, text.selectionStart, text.selectionEnd, 'end');
+    heldKey = null;
+  };
+  text.addEventListener('keydown', (e) => {
+    const isChordKey = (e.key === '.' || e.key === '-') && !e.metaKey && !e.ctrlKey && !e.altKey;
+    if (!isChordKey) { typeHeld(); return; }
+    e.preventDefault();
+    if (chordKeys.has(e.key) || e.repeat) return;
+    if (heldKey && heldKey !== e.key) {
+      clearTimeout(heldTimer);
+      chordKeys = new Set([heldKey, e.key]);
+      heldKey = null;
+      older();
+      return;
+    }
+    typeHeld();
+    heldKey = e.key;
+    heldTimer = setTimeout(typeHeld, 70);
+  });
+  text.addEventListener('keyup', (e) => {
+    if (chordKeys.delete(e.key)) return;
+    if (e.key === heldKey) typeHeld();
+  });
   const light = (e) => { kCtrl.classList.toggle('down', e.ctrlKey); kOpt.classList.toggle('down', e.altKey); };
   document.addEventListener('keydown', (e) => {
     light(e);
@@ -438,16 +465,11 @@ a { color: var(--link); text-underline-offset: .2em; }
       if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey) reached = true;
       return;
     }
-    rShiftAt = e.code === 'ShiftRight' ? e.timeStamp : 0;
     if (started) cancelled = true;
     if (isOpen() && (e.key === 'Escape' || (e.key === 'Enter' && e.metaKey))) { e.preventDefault(); save(); }
   });
   document.addEventListener('keyup', (e) => {
     light(e);
-    if (e.code === 'ShiftRight') {
-      if (rShiftAt && e.timeStamp - rShiftAt < 400 && isOpen()) older();
-      rShiftAt = 0;
-    }
     if (!(e.key === 'Control' || e.key === 'Alt') || e.ctrlKey || e.altKey) return;
     const fire = started && reached && !cancelled && e.timeStamp - started < 800;
     started = 0; reached = false; cancelled = false;

@@ -41,7 +41,7 @@ struct CaptureView: View {
                 Text(draft.caption)
                     .monospacedDigit()
                 Spacer()
-                Text(draft.canBrowse ? "right ⇧ older · esc or ⌘↩ save" : "esc or ⌘↩ save")
+                Text(draft.canBrowse ? ". and - for older · esc or ⌘↩ save" : "esc or ⌘↩ save")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
