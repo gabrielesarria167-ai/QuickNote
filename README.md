@@ -15,7 +15,7 @@ Neither character is typed when you press them together. Typed on their own, `.`
 back for 70 ms to see whether the other key joins it, too short to notice.
 
 ### Formatting
-Notes are plain Markdown, shown styled as you type. The marks fade away except on the line you're editing.
+Notes are plain Markdown, shown styled as you type: once a style is complete its marks are hidden, and a list of them sits under the editor. The caret steps over hidden marks, and backspace after a bullet, to-do or title mark turns the line back into plain text.
 
 | Type | Or select text and use the toolbar | Shortcut |
 | --- | --- | --- |

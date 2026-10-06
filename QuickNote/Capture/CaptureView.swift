@@ -34,18 +34,20 @@ struct CaptureView: View {
                     }
                 }
 
+            MarkdownCheatSheet()
+
             HStack {
                 Text(draft.caption)
                     .monospacedDigit()
                 Spacer()
-                Text(draft.canBrowse ? "select text to style · . and - for older · esc saves" : "select text to style · esc saves")
+                Text(draft.canBrowse ? "select text for more · . and - for older · esc saves" : "select text for more · esc saves")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         .padding(.top, 30)
         .padding([.horizontal, .bottom], 16)
-        .frame(minWidth: 460, minHeight: 240)
+        .frame(minWidth: 500, minHeight: 260)
         .background(.regularMaterial)
     }
 }

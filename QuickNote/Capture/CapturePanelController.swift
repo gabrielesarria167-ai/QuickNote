@@ -8,7 +8,7 @@ import SwiftUI
 final class CapturePanelController: NSObject, NSWindowDelegate {
     private let container: ModelContainer
     private let draft = CaptureDraft()
-    private let panelSize = NSSize(width: 600, height: 300)
+    private let panelSize = NSSize(width: 620, height: 320)
 
     /// Text of the new note, kept aside while browsing older notes.
     private var newNoteText = ""

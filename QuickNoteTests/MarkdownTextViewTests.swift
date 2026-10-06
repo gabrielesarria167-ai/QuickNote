@@ -35,14 +35,40 @@ struct MarkdownTextViewTests {
         #expect(font(of: textView, at: 0)!.pointSize < 1)  // the "#" of the title
     }
 
-    @Test func marksShowOnTheLineBeingEdited() {
+    @Test func marksStayHiddenWhileEditing() {
         let (window, textView) = makeEditor(text: sample)
         window.makeFirstResponder(textView)
         let bold = (textView.string as NSString).range(of: "**flush")
         textView.setSelectedRange(NSRange(location: bold.location + 3, length: 0))
-        textView.restyleIfLineChanged()
-        #expect(font(of: textView, at: bold.location)!.pointSize == 16)
-        #expect(font(of: textView, at: 0)!.pointSize < 1)  // other lines stay collapsed
+        #expect(font(of: textView, at: bold.location)!.pointSize < 1)
+    }
+
+    @Test func caretStepsOverHiddenMarks() {
+        let (window, textView) = makeEditor(text: "a **b** c")
+        window.makeFirstResponder(textView)
+        textView.setSelectedRange(NSRange(location: 2, length: 0))
+        textView.setSelectedRange(NSRange(location: 3, length: 0))  // into the opening ** going right
+        #expect(textView.selectedRange().location == 4)
+        textView.setSelectedRange(NSRange(location: 7, length: 0))
+        textView.setSelectedRange(NSRange(location: 6, length: 0))  // into the closing ** going left
+        #expect(textView.selectedRange().location == 5)
+    }
+
+    @Test func backspaceAfterALineMarkRemovesIt() {
+        let (window, textView) = makeEditor(text: "- item\n[ ] task")
+        window.makeFirstResponder(textView)
+        textView.setSelectedRange(NSRange(location: 2, length: 0))
+        textView.deleteBackward(nil)
+        #expect(textView.string == "item\n[ ] task")
+    }
+
+    @Test func typingAtTheEndOfStyledTextStaysInside() {
+        let (window, textView) = makeEditor(text: "**ab**")
+        window.makeFirstResponder(textView)
+        textView.setSelectedRange(NSRange(location: 4, length: 0))
+        textView.insertText("c", replacementRange: textView.selectedRange())
+        textView.insertText("d", replacementRange: textView.selectedRange())
+        #expect(textView.string == "**abcd**")
     }
 
     @Test func styledTextGetsItsLook() {
@@ -73,8 +99,8 @@ struct MarkdownTextViewTests {
         let draft = CaptureDraft()
         draft.begin()
         draft.text = sample
-        let host = NSHostingView(rootView: CaptureView(draft: draft).frame(width: 600, height: 300))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
+        let host = NSHostingView(rootView: CaptureView(draft: draft).frame(width: 620, height: 320))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 320), styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = host
         window.layoutIfNeeded()
         try await Task.sleep(for: .milliseconds(300))

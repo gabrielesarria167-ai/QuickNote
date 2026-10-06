@@ -1,14 +1,15 @@
 import AppKit
 
 /// A plain-text view that shows its Markdown styled as you type. The text itself never changes:
-/// marks are only dimmed (on the line being edited) or collapsed to nothing (everywhere else),
-/// and bullets and to-do boxes are drawn over their marks.
+/// once a style is complete its marks collapse to nothing, and bullets and to-do boxes are drawn
+/// over theirs. The caret steps over hidden marks as if they weren't there.
 final class MarkdownTextView: NSTextView {
     private(set) var lines: [MarkdownLine] = []
     private(set) var spans: [InlineSpan] = []
     private var baseFontSize: CGFloat = 16
-    /// The lines whose marks are showing, so a selection change only restyles when it moves line.
-    private var shownLines = NSRange(location: NSNotFound, length: 0)
+    /// Every mark currently hidden, which the caret is kept out of. Emptied while an edit is in
+    /// flight, when these ranges are stale.
+    private var hiddenMarks: [NSRange] = []
 
     private static let lineSpacing: CGFloat = 3
 
@@ -67,9 +68,8 @@ final class MarkdownTextView: NSTextView {
         guard let storage = textStorage else { return }
         lines = MarkdownParser.lines(in: string)
         spans = MarkdownParser.spans(in: string, lines: lines)
-        shownLines = currentLines()
-        let markColor = NSColor.tertiaryLabelColor
         var decorations: [MarkdownLayoutManager.Decoration] = []
+        var hidden: [NSRange] = []
 
         storage.beginEditing()
         storage.setAttributes(baseAttributes, range: NSRange(location: 0, length: storage.length))
@@ -84,10 +84,7 @@ final class MarkdownTextView: NSTextView {
                 break
             }
             guard line.markRange.length > 0 else { continue }
-            if isShowingMarks(of: line.range) {
-                storage.addAttribute(.foregroundColor, value: markColor, range: line.markRange)
-                continue
-            }
+            hidden.append(line.markRange)
             switch line.kind {
             case .title:
                 storage.addAttributes(Self.hidden, range: line.markRange)
@@ -109,20 +106,22 @@ final class MarkdownTextView: NSTextView {
             case .strike: storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: span.contentRange)
             case .highlight: storage.addAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.45), range: span.contentRange)
             }
-            let showing = isShowingMarks(of: span.range)
             for mark in [span.openMark, span.closeMark] {
-                if showing {
-                    storage.addAttribute(.foregroundColor, value: markColor, range: mark)
-                } else {
-                    storage.addAttributes(Self.hidden, range: mark)
-                }
+                storage.addAttributes(Self.hidden, range: mark)
+                hidden.append(mark)
             }
         }
         storage.endEditing()
 
         (layoutManager as? MarkdownLayoutManager)?.decorations = decorations
+        hiddenMarks = hidden
         typingAttributes = baseAttributes
         needsDisplay = true
+    }
+
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        hiddenMarks = []
+        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
     }
 
     // Every edit (typing, paste, undo, the formatting commands) re-reads the Markdown, so commands
@@ -132,22 +131,27 @@ final class MarkdownTextView: NSTextView {
         super.didChangeText()
     }
 
-    /// Restyles only if the caret moved to another line, so that line's marks appear.
-    func restyleIfLineChanged() {
-        if currentLines() != shownLines {
-            restyle()
+    /// Keeps the caret out of hidden marks: one that lands inside a mark moves past it, in the
+    /// direction it was going, so arrow keys step over marks in a single press.
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        var ranges = ranges
+        if ranges.count == 1, let caret = ranges.first?.rangeValue, caret.length == 0,
+           let mark = hiddenMarks.first(where: { caret.location > $0.location && caret.location < NSMaxRange($0) }) {
+            let movingForward = caret.location >= selectedRange().location
+            ranges = [NSValue(range: NSRange(location: movingForward ? NSMaxRange(mark) : mark.location, length: 0))]
         }
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
     }
 
-    /// The whole lines the selection touches: their marks show while you edit them.
-    private func currentLines() -> NSRange {
-        guard window?.firstResponder === self else { return NSRange(location: NSNotFound, length: 0) }
-        return (string as NSString).lineRange(for: selectedRange())
-    }
-
-    private func isShowingMarks(of range: NSRange) -> Bool {
-        guard shownLines.location != NSNotFound else { return false }
-        return NSLocationInRange(range.location, shownLines) || NSIntersectionRange(range, shownLines).length > 0
+    /// Backspace right after a bullet, to-do or title mark turns the line back into plain text.
+    override func deleteBackward(_ sender: Any?) {
+        let caret = selectedRange()
+        if caret.length == 0,
+           let line = lines.first(where: { $0.markRange.length > 0 && NSMaxRange($0.markRange) == caret.location }) {
+            replace(line.markRange, with: "")
+            return
+        }
+        super.deleteBackward(sender)
     }
 
     private func addTrait(_ trait: NSFontTraitMask, in range: NSRange, of storage: NSTextStorage) {
@@ -157,7 +161,7 @@ final class MarkdownTextView: NSTextView {
         }
     }
 
-    // Marks show only while editing, and the toolbar only while focused: tell both.
+    // The toolbar only shows while the editor has focus: tell it when that changes.
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
         if became { focusChanged() }
@@ -171,7 +175,6 @@ final class MarkdownTextView: NSTextView {
     }
 
     private func focusChanged() {
-        restyle()
         delegate?.textViewDidChangeSelection?(Notification(name: NSTextView.didChangeSelectionNotification, object: self))
     }
 

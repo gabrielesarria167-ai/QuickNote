@@ -29,6 +29,32 @@ struct FormattedTextEditor: View {
     }
 }
 
+/// The Markdown you can type, as a row of small examples under the editor.
+struct MarkdownCheatSheet: View {
+    private let items: [(mark: String, label: String)] = [
+        ("#", "title"), ("**", "bold"), ("_", "italic"), ("==", "highlight"), ("-", "list"), ("[ ]", "to-do"),
+    ]
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(items, id: \.label) { item in
+                HStack(spacing: 4) {
+                    Text(item.mark)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.quaternary, in: .rect(cornerRadius: 4))
+                    Text(item.label)
+                }
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Formatting: # title, two asterisks bold, underscore italic, two equals highlight, dash list, brackets to-do")
+    }
+}
+
 /// Where the selection is (top-left origin, in the editor's coordinates) and how it's styled.
 struct SelectionInfo: Equatable {
     var top: CGFloat
@@ -154,7 +180,6 @@ private struct MarkdownEditorRepresentable: NSViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            textView?.restyleIfLineChanged()
             publishSelection()
         }
 
