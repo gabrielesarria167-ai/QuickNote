@@ -15,6 +15,21 @@ Only a quick tap on its own counts: holding right Shift to type a capital letter
 
 Browse and edit all notes in the main window (Dock icon, or the 💡 menu bar icon → *Open QuickNote*).
 
+## Install
+Paste into Terminal:
+
+```sh
+curl -fsSL https://gabrielesarria167-ai.github.io/QuickNote/install.sh | bash
+```
+
+Files fetched with curl aren't quarantined, so macOS opens the app without the "could not verify" warning.
+Or [download QuickNote.dmg](https://github.com/gabrielesarria167-ai/QuickNote/releases/latest/download/QuickNote.dmg)
+and drag it into Applications. It isn't notarized, so the first launch needs System Settings › Privacy & Security ›
+**Open Anyway**. Run the command again to update; add `-s -- --uninstall` after `bash` to remove the app
+(your notes are kept).
+
+The download page is [gabrielesarria167-ai.github.io/QuickNote](https://gabrielesarria167-ai.github.io/QuickNote/).
+
 ## Requirements
 - macOS 15+
 - Xcode 16+ (developed with Xcode 26)
@@ -54,6 +69,18 @@ may need re-ticking after a rebuild; quit the installed QuickNote while running 
 the same ⌃⌥.
 
 Notes live in `~/Library/Application Support/<bundle id>/Notes.store`.
+
+## Releasing
+1. Bump `MARKETING_VERSION` in the QuickNote target's build settings.
+2. `./build.sh --release` (refuses to build without the "QuickNote Signing" certificate, so every release keeps
+   people's Accessibility permission).
+3. `gh release create v<version> dist/* --title "QuickNote <version>"`, ending the notes with
+   `**Download page:** [gabrielesarria167-ai.github.io/QuickNote](https://gabrielesarria167-ai.github.io/QuickNote/)`.
+   `install.sh` always fetches `QuickNote.zip` from the latest release; the page links its `QuickNote.dmg`.
+4. Push `main`. The site is served by GitHub Pages from `docs/` on `main`: `index.html` (download page) and
+   `install.sh` (the installer).
+
+The app icon is drawn in `scripts/icon.svg`; `swift scripts/make_icon.swift` renders it into the asset catalog.
 
 ## How it works
 | Piece | File |

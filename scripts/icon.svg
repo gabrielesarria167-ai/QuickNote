@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3f4b"/>
+      <stop offset="1" stop-color="#1c1f26"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe066"/>
+      <stop offset="1" stop-color="#f6c12c"/>
+    </linearGradient>
+  </defs>
+  <!-- macOS icon grid: 824×824 tile centred on the 1024 canvas -->
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#tile)"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="185.5" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="3"/>
+  <g transform="rotate(-7 500 560)">
+    <path d="M300 330 h360 a28 28 0 0 1 28 28 v260 l-130 130 h-258 a28 28 0 0 1 -28 -28 v-362 a28 28 0 0 1 28 -28 z" fill="url(#paper)"/>
+    <path d="M688 618 h-102 a28 28 0 0 0 -28 28 v102 z" fill="#d99a10"/>
+    <g stroke="#2a2e37" stroke-width="30" stroke-linecap="round">
+      <line x1="345" y1="440" x2="600" y2="440"/>
+      <line x1="345" y1="520" x2="560" y2="520"/>
+      <line x1="345" y1="600" x2="470" y2="600"/>
+    </g>
+  </g>
+  <path d="M736 196 C746 268 764 286 836 296 C764 306 746 324 736 396 C726 324 708 306 636 296 C708 286 726 268 736 196 Z" fill="#ffffff"/>
+</svg>
