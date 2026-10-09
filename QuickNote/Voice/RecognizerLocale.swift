@@ -4,15 +4,16 @@ import Foundation
 ///
 /// Pure logic with no AppKit dependency so it can be unit tested.
 enum RecognizerLocale {
-    /// Tries the current locale, then each preferred language in order. For each, an exact match
-    /// (language and region) wins; otherwise a supported locale of the same language, preferring the
-    /// region that language is usually used in (so `en_IT` listens as `en_US`). Returns an identifier
-    /// from `supported`, or nil if no candidate's language is supported.
-    static func choose(current: String, preferred: [String], supported: Set<String>) -> String? {
+    /// Tries the language the user chose in Settings (if any), then the current locale, then each
+    /// preferred language in order. For each, an exact match (language and region) wins; otherwise a
+    /// supported locale of the same language, preferring the region that language is usually used in
+    /// (so `en_IT` listens as `en_US`). Returns an identifier from `supported`, or nil if no
+    /// candidate's language is supported.
+    static func choose(current: String, preferred: [String], supported: Set<String>, chosen: String? = nil) -> String? {
         let options = supported.map { (identifier: $0, parts: parts(of: $0)) }
             .sorted { $0.identifier < $1.identifier }
 
-        for candidate in [current] + preferred {
+        for candidate in (chosen.map { [$0] } ?? []) + [current] + preferred {
             let wanted = parts(of: candidate)
             if let exact = options.first(where: { $0.parts == wanted }) {
                 return exact.identifier

@@ -4,8 +4,8 @@ import Testing
 struct RecognizerLocaleTests {
     private let supported: Set<String> = ["en_US", "en_GB", "en_AU", "it_IT", "zh_CN", "zh_TW", "de_DE"]
 
-    private func choose(_ current: String, _ preferred: [String] = []) -> String? {
-        RecognizerLocale.choose(current: current, preferred: preferred, supported: supported)
+    private func choose(_ current: String, _ preferred: [String] = [], chosen: String? = nil) -> String? {
+        RecognizerLocale.choose(current: current, preferred: preferred, supported: supported, chosen: chosen)
     }
 
     @Test func exactMatchWins() {
@@ -43,5 +43,23 @@ struct RecognizerLocaleTests {
     @Test func nothingSupportedGivesNil() {
         #expect(choose("xx_XX", ["yy-YY"]) == nil)
         #expect(RecognizerLocale.choose(current: "en_US", preferred: [], supported: []) == nil)
+    }
+
+    @Test func aChosenLanguageIsTriedFirst() {
+        #expect(choose("en_US", ["it-IT"], chosen: "de-DE") == "de_DE")
+        #expect(choose("en_US", chosen: "it-IT") == "it_IT")
+    }
+
+    @Test func aChosenLanguageWithAnUnsupportedRegionUsesTheUsualOne() {
+        #expect(choose("it_IT", chosen: "en-IT") == "en_US")
+    }
+
+    @Test func anUnsupportedChosenLanguageFallsBackToTheCurrentOne() {
+        #expect(choose("it_IT", chosen: "ja-JP") == "it_IT")
+        #expect(choose("xx_XX", ["it-IT"], chosen: "ja-JP") == "it_IT")
+    }
+
+    @Test func noChosenLanguageChangesNothing() {
+        #expect(choose("en_GB", chosen: nil) == "en_GB")
     }
 }

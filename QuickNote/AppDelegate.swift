@@ -7,6 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let permission = AccessibilityPermission()
     private(set) lazy var capture = CapturePanelController(container: container)
     let openNote = OpenNoteTracker()
+    /// Doesn't touch the Keychain until the Settings window or a recording asks.
+    let voiceSettings = VoiceSettings(keyStore: KeychainKeyStore())
     private(set) lazy var voice = VoiceCaptureController(container: container, capture: capture, openNote: openNote)
     private lazy var monitor = HotkeyMonitor(
         onTrigger: { [weak self] in self?.capture.toggle() },

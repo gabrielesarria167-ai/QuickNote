@@ -23,6 +23,10 @@ struct QuickNoteApp: App {
         } label: {
             MenuBarIcon(voice: appDelegate.voice)
         }
+
+        Settings {
+            SettingsView(settings: appDelegate.voiceSettings)
+        }
     }
 }
 
@@ -39,6 +43,7 @@ private struct MenuBarContent: View {
     let capture: CapturePanelController
     let voice: VoiceCaptureController
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -48,6 +53,11 @@ private struct MenuBarContent: View {
             openWindow(id: "main")
             NSApp.activate()
         }
+        Button("Settings…") {
+            openSettings()
+            NSApp.activate()
+        }
+        .keyboardShortcut(",")
         Divider()
         Toggle("Launch at Login", isOn: $launchAtLogin)
             .onChange(of: launchAtLogin) { _, enabled in
