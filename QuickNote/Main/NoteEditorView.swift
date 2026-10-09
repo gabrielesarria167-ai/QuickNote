@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NoteEditorView: View {
     @Bindable var note: Note
+    @Environment(OpenNoteTracker.self) private var openNote
 
     var body: some View {
         FormattedTextEditor(text: $note.text, fontSize: 14)
@@ -18,6 +19,12 @@ struct NoteEditorView: View {
             .navigationSubtitle(note.createdAt.formatted(date: .abbreviated, time: .shortened))
             .onChange(of: note.text) {
                 note.updatedAt = .now
+            }
+            .background(WindowReader { openNote.window = $0 })
+            .onAppear { openNote.note = note }
+            // The next note's editor may already have appeared, so only clear our own entry.
+            .onDisappear {
+                if openNote.note === note { openNote.note = nil }
             }
     }
 }

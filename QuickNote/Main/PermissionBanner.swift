@@ -15,7 +15,7 @@ struct PermissionBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("⌃⌥ shortcut is off")
                     .font(.headline)
-                Text("Allow “\(appName)” under Privacy & Security → Accessibility so it can notice ⌃⌥ in other apps.")
+                Text("Allow “\(appName)” under Privacy & Security → Accessibility so it can notice ⌃⌥ and ⌃⌥R in other apps.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(Bundle.main.bundleURL.path)

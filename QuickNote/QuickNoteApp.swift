@@ -9,6 +9,8 @@ struct QuickNoteApp: App {
         Window("QuickNote", id: "main") {
             NotesListView()
                 .environment(appDelegate.permission)
+                .environment(appDelegate.voice)
+                .environment(appDelegate.openNote)
         }
         .modelContainer(appDelegate.container)
         .commands {
@@ -16,19 +18,32 @@ struct QuickNoteApp: App {
             CommandGroup(replacing: .newItem) {}
         }
 
-        MenuBarExtra("QuickNote", systemImage: "lightbulb") {
-            MenuBarContent(capture: appDelegate.capture)
+        MenuBarExtra {
+            MenuBarContent(capture: appDelegate.capture, voice: appDelegate.voice)
+        } label: {
+            MenuBarIcon(voice: appDelegate.voice)
         }
+    }
+}
+
+/// The lightbulb, or a microphone while a voice note is being recorded.
+private struct MenuBarIcon: View {
+    let voice: VoiceCaptureController
+
+    var body: some View {
+        Label("QuickNote", systemImage: voice.isRecording ? "mic.fill" : "lightbulb")
     }
 }
 
 private struct MenuBarContent: View {
     let capture: CapturePanelController
+    let voice: VoiceCaptureController
     @Environment(\.openWindow) private var openWindow
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         Button("New Quick Note") { capture.show() }
+        Button(voice.isRecording ? "Stop Recording  ⌃⌥R" : "Record Voice Note  ⌃⌥R") { voice.toggle() }
         Button("Open QuickNote") {
             openWindow(id: "main")
             NSApp.activate()

@@ -6,9 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let container: ModelContainer
     let permission = AccessibilityPermission()
     private(set) lazy var capture = CapturePanelController(container: container)
-    private lazy var monitor = HotkeyMonitor { [weak self] in
-        self?.capture.toggle()
-    }
+    let openNote = OpenNoteTracker()
+    private(set) lazy var voice = VoiceCaptureController(container: container, capture: capture, openNote: openNote)
+    private lazy var monitor = HotkeyMonitor(
+        onTrigger: { [weak self] in self?.capture.toggle() },
+        onRecord: { [weak self] in self?.voice.toggle() }
+    )
 
     private static let isRunningTests =
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil

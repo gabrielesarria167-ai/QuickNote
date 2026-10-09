@@ -17,6 +17,11 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
     /// 0 is the new note; `n` is `olderNotes[n - 1]`.
     private var position = 0
 
+    /// Whether the panel is showing.
+    var isOpen: Bool { panel.isVisible }
+    /// Changes every time the panel opens, so a caller can tell whether it's still the same opening.
+    var session: Int { draft.session }
+
     private lazy var panel: CapturePanel = {
         let panel = CapturePanel(contentRect: NSRect(origin: .zero, size: panelSize))
         panel.contentView = NSHostingView(rootView: CaptureView(draft: draft))
@@ -47,6 +52,12 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         updateCaption()
         panel.setFrameOrigin(originOnActiveScreen())
         panel.makeKeyAndOrderFront(nil)
+    }
+
+    /// Adds a voice transcript to the end of the note being shown, as a new paragraph. Goes through
+    /// `draft.text` only: `stashEditorText()` copies that back to the note when you move on or close.
+    func appendTranscript(_ text: String) {
+        draft.text = TranscriptAccumulator.appending(text, to: draft.text)
     }
 
     /// Steps back to the next older note, wrapping around to the new note

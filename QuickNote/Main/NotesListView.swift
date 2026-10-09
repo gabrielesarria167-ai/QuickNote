@@ -4,6 +4,7 @@ import SwiftUI
 struct NotesListView: View {
     @Environment(\.modelContext) private var context
     @Environment(AccessibilityPermission.self) private var permission
+    @Environment(VoiceCaptureController.self) private var voice
     @Query(sort: \Note.updatedAt, order: .reverse) private var notes: [Note]
 
     @State private var selection: PersistentIdentifier?
@@ -36,6 +37,13 @@ struct NotesListView: View {
             .toolbar {
                 Button("New Note", systemImage: "square.and.pencil", action: newNote)
                     .keyboardShortcut("n")
+                Button(
+                    voice.isRecording ? "Stop Recording" : "Record Voice Note",
+                    systemImage: voice.isRecording ? "stop.fill" : "mic",
+                    action: recordVoiceNote
+                )
+                .tint(voice.isRecording ? .red : nil)
+                .help("Record a voice note (⌃⌥R)")
             }
         } detail: {
             Group {
@@ -46,7 +54,7 @@ struct NotesListView: View {
                     ContentUnavailableView(
                         "No Note Selected",
                         systemImage: "lightbulb",
-                        description: Text("Tap ⌃ and ⌥ together from any app to capture an idea.")
+                        description: Text("Tap ⌃ and ⌥ together from any app to capture an idea, or press ⌃⌥R to say it.")
                     )
                 }
             }
@@ -59,6 +67,20 @@ struct NotesListView: View {
         .frame(minWidth: 640, minHeight: 400)
         .onChange(of: selection) { oldValue, _ in
             discardIfBlank(oldValue)
+        }
+        .onChange(of: voice.lastCreatedNote) { _, note in
+            guard let note else { return }
+            search = ""
+            selection = note.id
+        }
+    }
+
+    /// Stops a recording in progress; otherwise starts one that adds to the selected note, if any.
+    private func recordVoiceNote() {
+        if voice.isRecording {
+            voice.toggle()
+        } else {
+            voice.start(preferNote: selectedNote)
         }
     }
 
