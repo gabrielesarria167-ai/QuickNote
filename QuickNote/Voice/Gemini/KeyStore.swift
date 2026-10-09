@@ -55,7 +55,9 @@ final class KeychainKeyStore: KeyStore {
         var request = query
         request[kSecReturnAttributes as String] = true
         request[kSecMatchLimit as String] = kSecMatchLimitOne
-        return SecItemCopyMatching(request as CFDictionary, nil) == errSecSuccess
+        let status = SecItemCopyMatching(request as CFDictionary, nil)
+        // A locked keychain refuses to answer without asking, which means there is something in it.
+        return status == errSecSuccess || status == errSecInteractionNotAllowed
     }
 
     func read() throws -> String? {

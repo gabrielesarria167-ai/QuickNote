@@ -38,12 +38,13 @@ struct NotesListView: View {
                 Button("New Note", systemImage: "square.and.pencil", action: newNote)
                     .keyboardShortcut("n")
                 Button(action: recordVoiceNote) {
-                    Image(systemName: voice.isRecording ? "stop.fill" : "mic")
+                    Image(systemName: voice.isTranscribing ? "waveform" : voice.isRecording ? "stop.fill" : "mic")
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(voice.isRecording ? Color.red : Color.primary)
+                        .foregroundStyle(voice.isRecording && !voice.isTranscribing ? Color.red : Color.primary)
                 }
-                .accessibilityLabel(voice.isRecording ? "Stop Recording" : "Record Voice Note")
-                .help("Record a voice note (⌃⌥R)")
+                .disabled(voice.isTranscribing)
+                .accessibilityLabel(voice.isTranscribing ? "Transcribing" : voice.isRecording ? "Stop Recording" : "Record Voice Note")
+                .help(voice.isTranscribing ? "Transcribing the voice note…" : "Record a voice note (⌃⌥R)")
             }
         } detail: {
             Group {

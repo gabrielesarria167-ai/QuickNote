@@ -91,7 +91,18 @@ struct GeminiResponseTests {
         let json = #"{"error":{"code":400,"message":"Invalid value at 'contents'.","status":"INVALID_ARGUMENT"}}"#
         #expect(parse(json, status: 400) == .failure(.malformed))
         #expect(parse("", status: 400) == .failure(.malformed))
-        #expect(parse(#"{"error":{"code":404,"message":"models/x is not found"}}"#, status: 404) == .failure(.malformed))
+    }
+
+    @Test func anUnknownModelIsBadModel() {
+        #expect(parse(#"{"error":{"code":404,"message":"models/x is not found","status":"NOT_FOUND"}}"#, status: 404) == .failure(.badModel))
+        #expect(parse("", status: 404) == .failure(.badModel))
+    }
+
+    @Test func partsMarkedAsThoughtsAreIgnored() {
+        let json = #"{"candidates":[{"content":{"parts":[{"text":"Let me think about this.","thought":true},{"text":"{\"title\":\"A\",\"transcript\":\"B\"}"}]},"finishReason":"STOP"}]}"#
+        #expect(parse(json) == .success(Transcription(title: "A", transcript: "B")))
+        let onlyThoughts = #"{"candidates":[{"content":{"parts":[{"text":"hmm","thought":true}]},"finishReason":"STOP"}]}"#
+        #expect(parse(onlyThoughts) == .failure(.empty))
     }
 
     @Test func tooManyRequestsIsQuota() {

@@ -57,4 +57,12 @@ struct TranscriptChoiceTests {
         #expect(TranscriptChoice.choose(gemini: .failure(.empty), apple: " ").text == "")
         #expect(TranscriptChoice.choose(gemini: nil, apple: "").text == "")
     }
+
+    @Test func geminiIsAskedOnlyWithAudioOfSomeLengthAndAKey() {
+        #expect(TranscriptChoice.shouldTranscribe(hasAudio: true, duration: 3, hasKey: true))
+        #expect(TranscriptChoice.shouldTranscribe(hasAudio: true, duration: 0.5, hasKey: true))
+        #expect(!TranscriptChoice.shouldTranscribe(hasAudio: true, duration: 0.49, hasKey: true))
+        #expect(!TranscriptChoice.shouldTranscribe(hasAudio: false, duration: 3, hasKey: true))
+        #expect(!TranscriptChoice.shouldTranscribe(hasAudio: true, duration: 3, hasKey: false))
+    }
 }

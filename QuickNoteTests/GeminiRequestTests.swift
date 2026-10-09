@@ -37,7 +37,7 @@ struct GeminiRequestTests {
         let body = try json(makeBody())
         let config = try #require(body["generationConfig"] as? [String: Any])
         #expect(config["responseMimeType"] as? String == "application/json")
-        #expect(config["temperature"] as? Double == 0)
+        #expect(config["temperature"] == nil)
         #expect(config["maxOutputTokens"] as? Int == 2000)
         #expect(config["thinkingConfig"] == nil)
 
@@ -70,6 +70,15 @@ struct GeminiRequestTests {
         #expect(String(decoding: body, as: UTF8.self).contains("SECRET-KEY") == false)
     }
 
+    @Test func aModelsPrefixAndWhitespaceAreStripped() {
+        #expect(GeminiRequest.normalizedModel("models/gemini-3.8-flash") == "gemini-3.8-flash")
+        #expect(GeminiRequest.normalizedModel("  gemini-3.8-flash \n") == "gemini-3.8-flash")
+        #expect(GeminiRequest.normalizedModel(" models/x ") == "x")
+        #expect(GeminiRequest.normalizedModel("tunedModels/x") == "tunedModels/x")
+        let request = GeminiRequest.urlRequest(model: "models/gemini-3.8-flash", apiKey: "k", body: Data(), timeout: 60)
+        #expect(request.url?.absoluteString == "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent")
+    }
+
     @Test func modelIdIsPercentEncodedIntoThePath() {
         let request = GeminiRequest.urlRequest(model: " my model/../x?y=1 ", apiKey: "k", body: Data(), timeout: 60)
         let url = request.url?.absoluteString
@@ -86,11 +95,28 @@ struct GeminiRequestTests {
     }
 
     @Test func outputTokensGrowWithTheAudioWithinBounds() {
-        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 0) == 1024)
-        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 60) == 1024 + 720)
-        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 1800) > GeminiLimits.maxOutputTokens(forAudioSeconds: 60))
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 0) == 8192)
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: -10) == 8192)
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 60) == 8192 + 1920)
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 1000) == 8192 + 32_000)
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 1800) == 65_536)
         #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 1_000_000) == 65_536)
-        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: .infinity) == 1024)
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: .infinity) == 8192)
+    }
+
+    @Test @MainActor func knownModelsAreTheOnesOfferedInSettings() {
+        #expect(GeminiLimits.knownModels == Set(VoiceSettings.modelPresets.map(\.id)))
+    }
+
+    @Test func aCustomModelGetsAtMost8192OutputTokens() {
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 1800, model: "my-custom-model") == 8192)
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 1800, model: "gemini-4") == 8192)
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 0, model: "my-custom-model") == 8192)
+    }
+
+    @Test func aPresetModelKeepsTheFullCap() {
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 1800, model: "gemini-3.8-flash") == 65_536)
+        #expect(GeminiLimits.maxOutputTokens(forAudioSeconds: 1800, model: " models/gemini-3.5-flash-lite ") == 65_536)
     }
 
     @Test func fitsInlineUntilTheBase64AndMarginReachTheLimit() {

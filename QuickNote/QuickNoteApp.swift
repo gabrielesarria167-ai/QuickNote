@@ -16,16 +16,16 @@ struct QuickNoteApp: App {
         .commands {
             // ⌘N creates a note (see NotesListView) instead of a new window.
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { appDelegate.showSettings() }
+                    .keyboardShortcut(",")
+            }
         }
 
         MenuBarExtra {
-            MenuBarContent(capture: appDelegate.capture, voice: appDelegate.voice)
+            MenuBarContent(capture: appDelegate.capture, voice: appDelegate.voice) { appDelegate.showSettings() }
         } label: {
             MenuBarIcon(voice: appDelegate.voice)
-        }
-
-        Settings {
-            SettingsView(settings: appDelegate.voiceSettings)
         }
     }
 }
@@ -42,22 +42,28 @@ private struct MenuBarIcon: View {
 private struct MenuBarContent: View {
     let capture: CapturePanelController
     let voice: VoiceCaptureController
+    let showSettings: () -> Void
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+    private var menuTitle: String {
+        if voice.isTranscribing { return "Transcribing…" }
+        return voice.isRecording ? "Stop Recording  ⌃⌥R" : "Record Voice Note  ⌃⌥R"
+    }
 
     var body: some View {
         Button("New Quick Note") { capture.show() }
-        Button(voice.isRecording ? "Stop Recording  ⌃⌥R" : "Record Voice Note  ⌃⌥R") { voice.toggle() }
+        Button(menuTitle) { voice.toggle() }
+            .disabled(voice.isTranscribing)
         Button("Open QuickNote") {
             openWindow(id: "main")
             NSApp.activate()
         }
-        Button("Settings…") {
-            openSettings()
-            NSApp.activate()
+        if voice.unsentCount > 0 {
+            Button("Unsent Recordings (\(voice.unsentCount))…") { voice.showUnsentRecordings() }
         }
-        .keyboardShortcut(",")
+        Button("Settings…", action: showSettings)
+            .keyboardShortcut(",")
         Divider()
         Toggle("Launch at Login", isOn: $launchAtLogin)
             .onChange(of: launchAtLogin) { _, enabled in

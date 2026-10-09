@@ -17,7 +17,7 @@ struct GeminiTranscriber: Sendable {
     /// Throws `GeminiError` for every failure Gemini or the network can cause (an unreadable or empty
     /// file is `.empty`, a file too big for one request `.tooLarge`), and `CancellationError` if the
     /// task is cancelled, so callers can tell "the user gave up" from "it failed".
-    nonisolated func transcribe(
+    @concurrent func transcribe(
         audioURL: URL,
         mimeType: String = "audio/aac",
         duration: TimeInterval,
@@ -34,7 +34,7 @@ struct GeminiTranscriber: Sendable {
             audio: audio,
             mimeType: mimeType,
             prompt: GeminiRequest.prompt,
-            maxOutputTokens: GeminiLimits.maxOutputTokens(forAudioSeconds: duration)
+            maxOutputTokens: GeminiLimits.maxOutputTokens(forAudioSeconds: duration, model: model)
         )
         guard let body else { throw GeminiError.malformed }
         let request = GeminiRequest.urlRequest(
@@ -44,19 +44,25 @@ struct GeminiTranscriber: Sendable {
             timeout: GeminiLimits.timeout(forAudioSeconds: duration)
         )
 
-        var result = try await attempt(request)
-        if case .failure(let error) = result, error == .quota || error == .server {
+        var outcome = try await attempt(request)
+        if outcome.mayRetry {
             try await Task.sleep(for: retryDelay)
-            result = try await attempt(request)
+            outcome = try await attempt(request)
         }
-        return try result.get()
+        return try outcome.result.get()
     }
 
-    private nonisolated func attempt(_ request: URLRequest) async throws -> Result<Transcription, GeminiError> {
+    /// One try. Only an answer from Google saying it is busy (`.quota`, `.server`) may be retried;
+    /// a request that failed on the way, such as a timeout, is not (it would only wait as long again).
+    private func attempt(_ request: URLRequest) async throws -> (result: Result<Transcription, GeminiError>, mayRetry: Bool) {
         try Task.checkCancellation()
         do {
             let (data, response) = try await transport(request)
-            return GeminiResponse.parse(data: data, statusCode: response.statusCode)
+            let result = GeminiResponse.parse(data: data, statusCode: response.statusCode)
+            if case .failure(let error) = result, error == .quota || error == .server {
+                return (result, true)
+            }
+            return (result, false)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as URLError {
@@ -65,12 +71,12 @@ struct GeminiTranscriber: Sendable {
                 throw CancellationError()
             case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost,
                  .dnsLookupFailed, .dataNotAllowed, .internationalRoamingOff:
-                return .failure(.offline)
+                return (.failure(.offline), false)
             default:
-                return .failure(.server)
+                return (.failure(.server), false)
             }
         } catch {
-            return .failure(.server)
+            return (.failure(.server), false)
         }
     }
 

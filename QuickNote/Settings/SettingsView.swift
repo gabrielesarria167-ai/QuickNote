@@ -61,7 +61,7 @@ struct SettingsView: View {
             } header: {
                 Text("Gemini")
             } footer: {
-                Text("With a key, each voice note's audio is sent to Google's Gemini API to transcribe it in any language and give it a title. On the free tier Google may use it to improve its products and people may review it; on a paid tier it doesn't. Without a key, everything stays on your Mac.")
+                Text("With a key, each voice note's audio is sent to Google's Gemini API to transcribe it in any language and give it a title. On the free tier Google may use it to improve its products and people may review it; on a paid tier it doesn't. Without a key, voice notes are transcribed on your Mac, or by Apple when your language has no on-device recognition.")
             }
 
             Section {

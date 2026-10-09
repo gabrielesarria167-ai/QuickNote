@@ -36,7 +36,6 @@ struct GeminiRequest: Encodable {
     struct GenerationConfig: Encodable {
         var responseMimeType: String
         var responseSchema: Schema
-        var temperature: Double
         var maxOutputTokens: Int
     }
 
@@ -74,7 +73,6 @@ struct GeminiRequest: Encodable {
                     required: ["title", "transcript"],
                     propertyOrdering: ["title", "transcript"]
                 ),
-                temperature: 0,
                 maxOutputTokens: maxOutputTokens
             )
         )
@@ -83,12 +81,19 @@ struct GeminiRequest: Encodable {
         return try encoder.encode(request)
     }
 
+    /// The model id as it goes in the URL: without surrounding whitespace or the `models/` that
+    /// Google's own model lists put in front.
+    static func normalizedModel(_ model: String) -> String {
+        let id = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return id.hasPrefix("models/") ? String(id.dropFirst("models/".count)) : id
+    }
+
     /// A POST of `body` to the model's `generateContent` endpoint. The model id is percent-encoded
     /// into the path, and the key is sent in the `x-goog-api-key` header only.
     static func urlRequest(model: String, apiKey: String, body: Data, timeout: TimeInterval) -> URLRequest {
         var allowed = CharacterSet.urlPathAllowed
         allowed.remove("/")
-        let id = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = normalizedModel(model)
         let encoded = id.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
         // Every character that could break a URL is percent-encoded above, so this can't be nil.
         var request = URLRequest(url: URL(string: endpoint + encoded + ":generateContent")!, timeoutInterval: timeout)
@@ -120,9 +125,16 @@ enum GeminiLimits {
         max(60, min(600, 60 + clamped(seconds)))
     }
 
-    /// A generous cap on the answer's length: far more than speech of that length needs.
-    static func maxOutputTokens(forAudioSeconds seconds: TimeInterval) -> Int {
-        min(65_536, max(1024, 1024 + Int(clamped(seconds) * 12)))
+    /// The models offered in Settings, which accept up to 65 536 output tokens.
+    static let knownModels: Set<String> = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
+
+    /// A generous cap on the answer's length: at least 8192 tokens, plus 32 per second of audio
+    /// (far more than speech needs), and never more than the models allow. For a `model` typed in
+    /// by hand the cap is 8192, which every model accepts; a larger one can be refused with a 400.
+    static func maxOutputTokens(forAudioSeconds seconds: TimeInterval, model: String? = nil) -> Int {
+        let tokens = min(65_536, 8192 + Int(clamped(seconds) * 32))
+        guard let model, !knownModels.contains(GeminiRequest.normalizedModel(model)) else { return tokens }
+        return min(tokens, 8192)
     }
 
     /// Keeps negative, infinite and NaN durations from reaching the arithmetic above.

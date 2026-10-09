@@ -18,6 +18,8 @@ enum GeminiError: Error, Equatable, Sendable {
     case blocked
     /// The answer was cut off at the output limit.
     case truncated
+    /// The model id isn't one Gemini knows (HTTP 404).
+    case badModel
     /// The request or the answer wasn't what was expected.
     case malformed
     /// Nothing was said, or there was no audio.
@@ -51,6 +53,8 @@ enum GeminiResponse {
             struct Content: Decodable {
                 struct Part: Decodable {
                     var text: String?
+                    /// The model's reasoning, not part of the answer.
+                    var thought: Bool?
                 }
                 var parts: [Part]?
             }
@@ -86,7 +90,7 @@ enum GeminiResponse {
             if reason == "MAX_TOKENS" { return .failure(.truncated) }
         }
 
-        let text = (candidate.content?.parts ?? []).compactMap(\.text).joined()
+        let text = (candidate.content?.parts ?? []).filter { $0.thought != true }.compactMap(\.text).joined()
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .failure(.empty)
         }
@@ -110,6 +114,7 @@ enum GeminiResponse {
             let rejected = reasons.contains { $0.localizedCaseInsensitiveContains("API_KEY_INVALID") || $0.localizedCaseInsensitiveContains("API key not valid") }
             return rejected ? .badKey : .malformed
         case 401, 403: return .badKey
+        case 404: return .badModel
         case 413: return .tooLarge
         case 429: return .quota
         case 400..<500 where statusCode != 408: return .malformed

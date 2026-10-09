@@ -3,19 +3,67 @@ import SwiftData
 
 /// Starts and stops voice recordings and decides where the transcript goes: appended to the note in
 /// the capture panel or the main window, or saved as a new note.
+///
+/// With a Gemini key the recording is also kept as audio; after it stops, Gemini transcribes it and
+/// titles it while the pill says "Transcribing…". The user can discard it (✕ twice), or keep Apple's
+/// on-device text right away (■). A recording is never deleted unless it was transcribed, held no
+/// speech, or the user discarded it: if Gemini fails it moves to the Unsent Recordings folder, Apple's
+/// text is saved and the pill offers Retry. On quit the same happens at once (`saveForQuit`).
 @MainActor
 @Observable
 final class VoiceCaptureController {
+    /// A recording waiting for Gemini.
+    private struct Pending {
+        var apple: String
+        var target: RecordTarget<Note>
+        var error: VoiceRecorderError?
+        var audioURL: URL
+        var duration: TimeInterval
+        /// A retry of a kept recording: the file stays wherever it is, whatever happens.
+        var isRetry = false
+        /// Apple's recognizer gave up, so `apple` lacks the end of the recording.
+        var appleIncomplete = false
+
+        var kind: RecordingPillModel.Transcribing.Kind {
+            isRetry ? .retry : appleIncomplete ? .appleIncomplete : .normal
+        }
+    }
+
+    /// A recording left in Unsent Recordings, which Retry can send again.
+    private struct Kept {
+        var url: URL
+        var duration: TimeInterval
+        var target: RecordTarget<Note>
+        var reason: KeptReason
+        /// The file is in the Unsent Recordings folder. If moving it there failed it is still where it
+        /// was, in the temporary folder, and the next launch tries again.
+        var isSafe = true
+    }
+
     private let container: ModelContainer
     private let capture: CapturePanelController
     private let openNote: OpenNoteTracker
+    private let settings: VoiceSettings
 
     @ObservationIgnored private let recorder = VoiceRecorder()
     @ObservationIgnored private lazy var pill = RecordingPill(
         recorder: recorder,
-        onStop: { [weak self] in self?.finish() },
-        onCancel: { [weak self] in self?.cancel() }
+        onStop: { [weak self] in self?.stopButtonPressed() },
+        onCancel: { [weak self] in self?.cancelButtonPressed() },
+        onOpenSettings: { [weak self] in self?.openSettings() },
+        onRetry: { [weak self] in self?.retry() },
+        onShowInFinder: { [weak self] in self?.showKeptRecordingInFinder() }
     )
+    @ObservationIgnored private let openSettings: () -> Void
+    /// Gemini's transcription of the last recording, while it runs.
+    @ObservationIgnored private var transcribeTask: Task<Void, Never>?
+    /// What is needed to finish the recording that Gemini is transcribing.
+    @ObservationIgnored private var pending: Pending?
+    /// The recording the pill's Retry button would send.
+    @ObservationIgnored private var lastKept: Kept?
+    /// ✕ needs two presses while transcribing.
+    @ObservationIgnored private var confirmDiscard = ConfirmPress()
+
     /// Chosen once, when the recording starts.
     @ObservationIgnored private var target = RecordTarget<Note>.newNote
     /// Set as soon as a stop is requested; the recorder only changes state a moment later.
@@ -28,18 +76,47 @@ final class VoiceCaptureController {
     /// The note most recently created from a recording, so the main window can select it.
     private(set) var lastCreatedNote: Note?
 
-    /// True from the first ⌃⌥R until the transcript is saved.
-    var isRecording: Bool { isStarting || recorder.state != .idle }
+    /// Gemini is transcribing a recording.
+    private(set) var isTranscribing = false
 
-    init(container: ModelContainer, capture: CapturePanelController, openNote: OpenNoteTracker) {
+    /// How many recordings wait in the Unsent Recordings folder. Updated by `refreshUnsentCount()`.
+    private(set) var unsentCount = 0
+
+    /// True from the first ⌃⌥R until the transcript is saved, including the wait for Gemini.
+    var isRecording: Bool { isStarting || recorder.state != .idle || isTranscribing }
+
+    /// `openSettings` shows the Settings window; the pill's "Open Settings" button calls it.
+    init(
+        container: ModelContainer,
+        capture: CapturePanelController,
+        openNote: OpenNoteTracker,
+        settings: VoiceSettings,
+        openSettings: @escaping () -> Void
+    ) {
         self.container = container
         self.capture = capture
         self.openNote = openNote
+        self.settings = settings
+        self.openSettings = openSettings
         recorder.onStopRequested = { [weak self] error in self?.finish(error: error) }
     }
 
+    /// Counts the files in Unsent Recordings. Cheap; called when the app comes to the front.
+    func refreshUnsentCount() {
+        unsentCount = UnsentRecordings.count()
+    }
+
+    /// Opens the Unsent Recordings folder in Finder.
+    func showUnsentRecordings() {
+        NSWorkspace.shared.open(UnsentRecordings.folder)
+    }
+
+    /// ⌃⌥R. While Gemini is transcribing it only makes the pill pulse: that recording is finished and
+    /// waits for its title and text.
     func toggle() {
-        if isStarting || recorder.state == .starting {
+        if isTranscribing {
+            pill.flash()
+        } else if isStarting || recorder.state == .starting {
             // Still waiting for a permission prompt: abandon it.
             cancel()
         } else if recorder.state == .idle {
@@ -54,16 +131,21 @@ final class VoiceCaptureController {
     func start(preferNote: Note? = nil) {
         guard !isRecording else { return }
         target = chooseTarget(preferNote: preferNote)
+        lastKept = nil
         isStopping = false
         isStarting = true
         startID += 1
         let id = startID
         // Shown right away: a permission prompt can keep the first start waiting a while.
         pill.showRecording(below: capture.frame)
+        // Looks the key up without reading it, so it can't ask the user for anything.
+        settings.refreshKeyState()
+        let recordAudio = settings.hasGeminiKey
+        let language = settings.onDeviceLanguage
         Task {
             guard id == startID else { return }
             do {
-                try await recorder.start()
+                try await recorder.start(recordAudio: recordAudio, language: language)
             } catch is CancellationError {
                 // Cancelled while waiting for permission; nothing to show.
             } catch let error as VoiceRecorderError {
@@ -81,21 +163,254 @@ final class VoiceCaptureController {
         return RecordTarget.choose(preferred: preferNote, panel: panel, keyEditorNote: keyEditorNote)
     }
 
-    /// Stops listening and saves what was said. If the recording had to stop because of `error`, the
-    /// pill then says why.
+    /// Stops listening, then saves what was said: Gemini's transcript and title if there is a key and
+    /// it works, otherwise Apple's text. If the recording had to stop because of `error`, the pill
+    /// then says why.
     private func finish(error: VoiceRecorderError? = nil) {
         guard recorder.state == .recording, !isStopping else { return }
         isStopping = true
+        // Chosen when the recording started; copied before the first await.
+        let target = target
         Task {
-            let text = await recorder.stop()
-            pill.dismiss()
+            let recording = await recorder.stop()
             isStopping = false
-            save(text)
-            if let error {
-                let nothingHeard = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                pill.showError(error == .recognitionStopped && nothingHeard ? .recognitionNotWorking : error)
+
+            guard let audioURL = recording.audioURL else {
+                conclude(gemini: nil, apple: recording.text, target: target, error: error, kept: nil)
+                return
+            }
+            var key: String?
+            var keyUnreadable = false
+            // The key is read only now, and only if there is something worth sending.
+            if TranscriptChoice.shouldTranscribe(hasAudio: true, duration: recording.duration, hasKey: settings.hasGeminiKey) {
+                do {
+                    key = try settings.readKey()
+                } catch {
+                    keyUnreadable = true
+                }
+            }
+            if let key {
+                beginTranscription(
+                    Pending(
+                        apple: recording.text, target: target, error: error, audioURL: audioURL,
+                        duration: recording.duration, appleIncomplete: recording.appleIncomplete
+                    ),
+                    key: key
+                )
+            } else if keyUnreadable {
+                let kept = keep(audioURL, duration: recording.duration, target: target, reason: .keyUnreadable)
+                conclude(gemini: nil, apple: recording.text, target: target, error: error, kept: kept)
+            } else {
+                // Too short to send, or the key is gone: nothing worth keeping.
+                try? FileManager.default.removeItem(at: audioURL)
+                conclude(gemini: nil, apple: recording.text, target: target, error: error, kept: nil)
             }
         }
+    }
+
+    /// Sends the recording to Gemini and finishes the note when it answers. The pill shows the wait.
+    private func beginTranscription(_ pending: Pending, key: String) {
+        self.pending = pending
+        isTranscribing = true
+        confirmDiscard.reset()
+        pill.showTranscribing(preview: pending.apple, kind: pending.kind)
+        let model = settings.model
+        transcribeTask = Task {
+            let result: Result<Transcription, GeminiError>
+            do {
+                let transcription = try await GeminiTranscriber().transcribe(
+                    audioURL: pending.audioURL, duration: pending.duration, apiKey: key, model: model
+                )
+                result = .success(transcription)
+            } catch let error as GeminiError {
+                result = .failure(error)
+            } catch {
+                // Cancelled: whoever did that has already dealt with the recording.
+                return
+            }
+            guard !Task.isCancelled, let pending = self.pending else { return }
+            self.pending = nil
+            isTranscribing = false
+            transcribeTask = nil
+            settle(result, for: pending)
+        }
+    }
+
+    /// Gemini answered. Keeps or deletes the audio, then saves the text and tells the user what they
+    /// need to know.
+    private func settle(_ result: Result<Transcription, GeminiError>, for pending: Pending) {
+        var kept: Kept?
+        if UnsentRecordings.shouldKeep(after: result, appleIncomplete: pending.appleIncomplete, duration: pending.duration),
+           case .failure(let error) = result {
+            kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, reason: .gemini(error))
+        } else {
+            try? FileManager.default.removeItem(at: pending.audioURL)
+        }
+        conclude(gemini: result, apple: pending.apple, target: pending.target, error: pending.error, kept: kept)
+    }
+
+    /// Picks the text, saves it and tells the user anything they need to know. A notice about a kept
+    /// recording comes before a recorder error: it is the one that says nothing was lost.
+    private func conclude(
+        gemini: Result<Transcription, GeminiError>?,
+        apple: String,
+        target: RecordTarget<Note>,
+        error: VoiceRecorderError?,
+        kept: Kept?
+    ) {
+        let choice = TranscriptChoice.choose(gemini: gemini, apple: apple)
+        let composed = VoiceNoteText.compose(title: choice.title, transcript: choice.text)
+        save(composed, to: target)
+        lastKept = kept
+        refreshUnsentCount()
+
+        let nothingHeard = composed.isEmpty
+        if let kept {
+            pill.showNotice(
+                GeminiNotice.keptMessage(for: kept.reason, savedOnDevice: !nothingHeard, recordingKept: kept.isSafe),
+                opensSettings: GeminiNotice.offersSettings(for: kept.reason),
+                keptRecording: true
+            )
+        } else if let error {
+            pill.showError(error == .recognitionStopped && nothingHeard ? .recognitionNotWorking : error)
+        } else if let notice = choice.notice, !(notice == .empty && nothingHeard) {
+            pill.showNotice(
+                GeminiNotice.message(for: notice, savedOnDevice: !nothingHeard),
+                opensSettings: GeminiNotice.offersSettings(for: notice)
+            )
+        } else {
+            pill.dismiss()
+        }
+    }
+
+    /// The pill's ■: saves the recording, or while Gemini is working stops waiting for it.
+    private func stopButtonPressed() {
+        if isTranscribing {
+            stopWaiting()
+        } else {
+            finish()
+        }
+    }
+
+    /// The pill's ✕: discards the recording. While Gemini works it takes a second press within three
+    /// seconds, since there is no way back. A retry just stops: the recording stays where it is.
+    private func cancelButtonPressed() {
+        guard isTranscribing else {
+            cancel()
+            return
+        }
+        guard let pending else { return }
+        if pending.isRetry {
+            stopWaiting()
+        } else if confirmDiscard.press(at: ProcessInfo.processInfo.systemUptime) {
+            endTranscription()
+            try? FileManager.default.removeItem(at: pending.audioURL)
+            pill.dismiss()
+        } else {
+            pill.armDiscard()
+        }
+    }
+
+    /// Stops waiting for Gemini. Apple's text is saved without a title; the recording is deleted if
+    /// that text is all of it, and kept in Unsent Recordings if Apple's recognizer had given up. For a
+    /// retry nothing is saved and the recording stays.
+    private func stopWaiting() {
+        guard let pending else { return }
+        endTranscription()
+        guard !pending.isRetry else {
+            pill.dismiss()
+            return
+        }
+        var kept: Kept?
+        if UnsentRecordings.shouldKeepWhenStoppedWaiting(appleIncomplete: pending.appleIncomplete) {
+            kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, reason: .stoppedWaiting)
+        } else {
+            try? FileManager.default.removeItem(at: pending.audioURL)
+        }
+        conclude(gemini: nil, apple: pending.apple, target: pending.target, error: pending.error, kept: kept)
+    }
+
+    /// Cancels the request. What happens to the audio file is up to the caller.
+    private func endTranscription() {
+        transcribeTask?.cancel()
+        transcribeTask = nil
+        isTranscribing = false
+        pending = nil
+    }
+
+    /// Moves a recording to Unsent Recordings (it may already be there).
+    private func keep(_ url: URL, duration: TimeInterval, target: RecordTarget<Note>, reason: KeptReason) -> Kept {
+        if UnsentRecordings.contains(url) {
+            return Kept(url: url, duration: duration, target: target, reason: reason)
+        }
+        let moved = UnsentRecordings.move(url)
+        return Kept(url: moved ?? url, duration: duration, target: target, reason: reason, isSafe: moved != nil)
+    }
+
+    /// The pill's Retry: sends the kept recording to Gemini again. The text goes to the same target as
+    /// before, through the usual fallbacks; a note that already got Apple's text gets Gemini's as its
+    /// own `# Title` block below it (a new recording's target `.newNote` becomes a second note).
+    private func retry() {
+        guard let kept = lastKept, !isRecording else { return }
+        let key: String?
+        do {
+            key = try settings.readKey()
+        } catch {
+            lastKept = Kept(url: kept.url, duration: kept.duration, target: kept.target, reason: .keyUnreadable, isSafe: kept.isSafe)
+            pill.showNotice(
+                GeminiNotice.keptMessage(for: .keyUnreadable, savedOnDevice: false, recordingKept: kept.isSafe),
+                opensSettings: false,
+                keptRecording: true
+            )
+            return
+        }
+        guard let key else {
+            lastKept = Kept(url: kept.url, duration: kept.duration, target: kept.target, reason: .gemini(.badKey), isSafe: kept.isSafe)
+            pill.showNotice(
+                GeminiNotice.keptMessage(for: .gemini(.badKey), savedOnDevice: false, recordingKept: kept.isSafe),
+                opensSettings: true,
+                keptRecording: true
+            )
+            return
+        }
+        beginTranscription(
+            Pending(apple: "", target: kept.target, error: nil, audioURL: kept.url, duration: kept.duration, isRetry: true),
+            key: key
+        )
+    }
+
+    private func showKeptRecordingInFinder() {
+        guard let url = lastKept?.url else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    /// The app is quitting. Saves whatever there is right now: Apple's text goes to its target, and a
+    /// recording still on its way to Gemini moves to Unsent Recordings, so nothing is lost.
+    func saveForQuit() {
+        if let pending {
+            endTranscription()
+            if !pending.isRetry {
+                _ = UnsentRecordings.move(pending.audioURL)
+                save(VoiceNoteText.compose(title: nil, transcript: pending.apple), to: pending.target)
+            }
+        } else if recorder.state == .recording || recorder.state == .finishing {
+            let recording = recorder.stopNow()
+            if let url = recording.audioURL {
+                if recording.duration >= TranscriptChoice.minimumAudioDuration {
+                    _ = UnsentRecordings.move(url)
+                } else {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+            save(recording.text, to: target)
+        } else if isRecording {
+            cancel()
+        }
+        // The capture panel writes its draft (which now holds the text) when it closes.
+        if capture.isOpen {
+            capture.commit()
+        }
+        pill.dismiss()
     }
 
     private func cancel() {
@@ -105,7 +420,7 @@ final class VoiceCaptureController {
         pill.dismiss()
     }
 
-    private func save(_ transcript: String) {
+    private func save(_ transcript: String, to target: RecordTarget<Note>) {
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 

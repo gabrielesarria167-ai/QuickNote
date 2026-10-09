@@ -138,9 +138,10 @@ struct GeminiTranscriberTests {
         }
     }
 
-    @Test func aTimeoutIsAServerError() async {
-        let fake = FakeTransport([.failure(.timedOut)])
+    @Test func aTimeoutIsAServerErrorAndNotRetried() async {
+        let fake = FakeTransport([.failure(.timedOut), Self.good])
         #expect(await failure(fake) == .server)
+        #expect(fake.requests.count == 1)
     }
 
     @Test func aCancelledRequestThrowsCancellation() async throws {

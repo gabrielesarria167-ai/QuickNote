@@ -37,6 +37,47 @@ Privacy & Security; the pill tells you where if one is off. The permission promp
 panel and closes it (saving what you typed), so that first transcript is added to the note the panel was on, or
 becomes a new note if it was on the new one.
 
+### Any language, with a title (Gemini)
+Apple's on-device recognizer listens in one language. Add a Google **Gemini** API key and each voice note is also
+transcribed by Gemini when you stop: in whatever language you spoke, including a mix of several (say, Italian
+and Japanese in one note), with paragraphs and a short **title** on the first line (`# Title`). The title goes above
+the transcript whether it becomes a new note or is appended to an open one.
+
+1. Get a key in [Google AI Studio](https://aistudio.google.com/apikey).
+2. Open the **Settings** window (⌘, in QuickNote, or the menu bar icon → *Settings…*), paste the key under *Gemini* and press *Save*.
+   The key is kept in your login Keychain and is never shown again; *Remove* deletes it.
+3. Pick a model: *Gemini 3.8 Flash* (best, the default), *Gemini 3.5 Flash-Lite* (cheaper) or any model id under
+   *Custom…*.
+
+While it works the pill says *Transcribing…* and shows Apple's text. ■ saves Apple's text at once without waiting;
+✕ throws the recording away, and needs a second press within 3 seconds, since there is no way back.
+
+**Nothing is lost when Gemini fails.** If Gemini can't be used (no connection, quota reached, the key or model was
+rejected, an error), the note is saved with Apple's on-device text and the recording is moved to
+`~/Library/Application Support/<bundle id>/Unsent Recordings/` (named by date, e.g. `2026-10-10 14.03.22.aac`).
+The pill stays until you dismiss it and offers **Retry**, **Show in Finder** and, for a rejected key or model,
+**Open Settings**. Retry sends the kept recording again to the same place; if the note already has Apple's text,
+Gemini's goes below it as its own `# Title` block (a recording made into a new note gets a second note). The file is
+deleted only after a successful retry. While files wait, the menu bar icon has an *Unsent Recordings (n)…* item
+that opens the folder. If Apple's recognizer gave up during a long recording (the pill says *Listening — text
+after you stop*), ■ becomes *Stop waiting — keep the recording*, since the audio is then the only full copy.
+A recording Gemini says has no speech in it, or one shorter than half a second, is not kept, unless it is longer than 30 seconds or Apple's text is incomplete (Gemini may be wrong then).
+
+**Quitting** (⌘Q or the menu) while a recording is going or waiting for Gemini saves Apple's text to its note and
+moves the audio to Unsent Recordings, so you can retry it later.
+
+*On-device recognition* in Settings picks the language of Apple's recognizer (Automatic follows your system
+language). It is what you see while you speak, and the text of the note when there is no key or Gemini fails.
+
+**Privacy.** Without a key everything stays on your Mac (or goes to Apple's servers if your language has no
+on-device recognition). With a key, each voice note's audio is sent to Google's Gemini API. On the free tier Google
+may use it to improve its products and people may review it; on a paid tier it doesn't ([terms](https://ai.google.dev/gemini-api/terms)).
+The audio is written to a temporary file only while there is a key and deleted once Gemini has answered or you
+discard it; if Gemini fails it is kept in Unsent Recordings (see above) until a retry succeeds or you delete it.
+After a crash, the next launch moves whatever recording it left in the temporary folder (if it holds more than a few
+seconds of audio) to Unsent Recordings too. A recording is sent in one
+request, so the limit is about 14 MB of audio, far more than the 30 minute recording limit needs.
+
 ### Formatting
 Notes are plain Markdown, shown styled as you type: once a style is complete its marks are hidden, and a list of them sits under the editor. The caret steps over hidden marks, and backspace after a bullet, to-do or title mark turns the line back into plain text.
 
@@ -51,7 +92,7 @@ Notes are plain Markdown, shown styled as you type: once a style is complete its
 | `==highlight==` | Highlight | ⇧⌘H |
 
 Browse and edit all notes in the main window (Dock icon, or the 💡 menu bar icon → *Open QuickNote*). The menu bar
-icon turns into a 🎙 while a voice note is being recorded.
+icon turns into a 🎙 while a voice note is being recorded or transcribed.
 
 ## Install
 Paste into Terminal:
@@ -133,6 +174,12 @@ The app icon is drawn in `scripts/icon.svg`; `swift scripts/make_icon.swift` ren
 | Stitching the pieces of a long recording, when to switch (pure, unit tested) | `QuickNote/Voice/SegmentedTranscript.swift`, `SegmentScheduler.swift` |
 | Where a recording goes, language choice, pill text (pure, unit tested) | `QuickNote/Voice/RecordTarget.swift`, `RecognizerLocale.swift`, `TranscriptExcerpt.swift` |
 | Microphone + speech recognition | `QuickNote/Voice/VoiceRecorder.swift`, `AudioTap.swift`, `SpeechPermissions.swift` |
+| Gemini request, answer, retries and limits (pure parts unit tested) | `QuickNote/Voice/Gemini/GeminiRequest.swift`, `GeminiResponse.swift`, `GeminiTranscriber.swift` |
+| Gemini or Apple text, pill notices (pure, unit tested) | `QuickNote/Voice/Gemini/TranscriptChoice.swift`, `GeminiNotice.swift`, `QuickNote/Voice/VoiceNoteText.swift` |
+| API key in the Keychain | `QuickNote/Voice/Gemini/KeyStore.swift` |
+| Writing the audio as 16 kHz mono AAC while recording | `QuickNote/Voice/AudioFileWriter.swift` |
+| Unsent Recordings folder, keep-or-delete rule, double-press ✕ (pure parts unit tested) | `QuickNote/Voice/UnsentRecordings.swift`, `ConfirmPress.swift` |
+| Settings window (an `NSWindow` owned by `AppDelegate`, opened by ⌘, / menu bar / the pill) and the values behind it | `QuickNote/Settings/SettingsView.swift`, `QuickNote/Voice/VoiceSettings.swift` |
 | Recording pill (never key, so the panel stays open) | `QuickNote/Voice/RecordingPill.swift` |
 | Starting/stopping a recording, saving the transcript | `QuickNote/Voice/VoiceCaptureController.swift` |
 | Which note the main window shows | `QuickNote/Voice/OpenNoteTracker.swift`, `QuickNote/Main/WindowReader.swift` |

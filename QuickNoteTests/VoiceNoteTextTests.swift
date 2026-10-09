@@ -57,6 +57,15 @@ struct VoiceNoteTextTests {
         #expect(VoiceNoteText.sanitizeTitle("Version 1.2 notes") == "Version 1.2 notes")
     }
 
+    @Test func singleQuotesGoOnlyAsAPair() {
+        #expect(VoiceNoteText.sanitizeTitle("'Trip plan'") == "Trip plan")
+        #expect(VoiceNoteText.sanitizeTitle("‘Trip plan’") == "Trip plan")
+        #expect(VoiceNoteText.sanitizeTitle("'Trip plan'.") == "Trip plan")
+        #expect(VoiceNoteText.sanitizeTitle("The dogs'") == "The dogs'")
+        #expect(VoiceNoteText.sanitizeTitle("The dogs’") == "The dogs’")
+        #expect(VoiceNoteText.sanitizeTitle("'Tis the season") == "'Tis the season")
+    }
+
     @Test func inlineMarksAreRemoved() {
         #expect(VoiceNoteText.sanitizeTitle("**Bold** and _italic_") == "Bold and italic")
         #expect(VoiceNoteText.sanitizeTitle("~~Old~~ ==new== title") == "Old new title")

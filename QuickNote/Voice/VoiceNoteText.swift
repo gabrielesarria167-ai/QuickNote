@@ -8,7 +8,9 @@ enum VoiceNoteText {
     static let maxTitleLength = 80
 
     private static let lineMark = #"^(?:#{1,6}|>|[-*•]|\[[ xX]\])(?:\s+|$)"#
-    private static let quotes = CharacterSet(charactersIn: "\"'`“”„‘’‚«»「」『』")
+    /// Quotes stripped from either end on their own. Single quotes are left out: they double as
+    /// apostrophes ("the dogs'"), so they only go as a pair.
+    private static let quotes = CharacterSet(charactersIn: "\"`“”„«»「」『』")
     private static let endings = CharacterSet(charactersIn: ".。…").union(.whitespaces)
     private static let danglingPunctuation = CharacterSet(charactersIn: ",;:-–—.。…").union(.whitespaces)
 
@@ -27,6 +29,7 @@ enum VoiceNoteText {
             previous = text
             text = text.replacingOccurrences(of: lineMark, with: "", options: .regularExpression)
             text = text.trimmingCharacters(in: quotes.union(.whitespaces))
+            text = strippingSingleQuotePair(text)
             text = trimmingEnd(text, of: endings.union(quotes))
         } while text != previous
         text = trimmingEnd(MarkdownParser.plainText(text), of: endings.union(quotes))
@@ -52,6 +55,14 @@ enum VoiceNoteText {
         guard !transcript.isEmpty else { return "" }
         guard let title = sanitizeTitle(title) else { return transcript }
         return "# \(title)\n\(transcript)"
+    }
+
+    /// The text without a single quote at both ends ('like this' or ‘like this’); one on its own stays.
+    private static func strippingSingleQuotePair(_ text: String) -> String {
+        guard text.count > 1, let first = text.first, let last = text.last,
+              "'‘’".contains(first), "'’‘".contains(last)
+        else { return text }
+        return String(text.dropFirst().dropLast())
     }
 
     private static func trimmingEnd(_ text: String, of set: CharacterSet) -> String {

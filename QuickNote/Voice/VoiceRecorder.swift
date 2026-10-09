@@ -11,6 +11,20 @@ import Foundation
 @MainActor
 @Observable
 final class VoiceRecorder {
+    /// What a finished recording leaves behind.
+    struct Recording: Sendable {
+        /// What Apple's recognizer heard.
+        var text: String
+        /// The recorded audio, if it was kept for Gemini. The caller deletes the file.
+        var audioURL: URL?
+        /// Length of the audio in seconds (0 without audio).
+        var duration: TimeInterval
+        /// Apple's recognizer gave up during the recording, so `text` lacks the end of it.
+        var appleIncomplete: Bool
+
+        static let empty = Recording(text: "", audioURL: nil, duration: 0, appleIncomplete: false)
+    }
+
     enum State: Equatable {
         case idle
         case starting
@@ -25,6 +39,9 @@ final class VoiceRecorder {
     private(set) var level = 0.0
     /// When recording began; the pill works out the elapsed time from it.
     private(set) var startedAt: Date?
+    /// Apple's recognizer gave up while the audio is still being recorded for Gemini, so there is no
+    /// live text any more. The pill then says the text comes after you stop.
+    private(set) var appleStopped = false
 
     /// Called when the recorder wants to be stopped and saved by its owner: with nil when the time
     /// limit is reached, with an error when it can't go on. Called once per recording.
@@ -41,6 +58,13 @@ final class VoiceRecorder {
     /// Bumped by `cancel()` so an awaiting `start()` or `stop()` notices it was abandoned.
     @ObservationIgnored private var recordingID = 0
     @ObservationIgnored private var stopRequested = false
+    /// The finished audio file while `stop()` waits for the recognizers' last words, so `stopNow()` can
+    /// still hand it over if the app quits in that moment.
+    @ObservationIgnored private var finishingAudio: (url: URL, duration: TimeInterval)?
+    /// Writes the audio file for Gemini; nil when no key was set up at the start or it couldn't be created.
+    @ObservationIgnored private var writer: AudioFileWriter?
+    /// The language chosen in Settings, nil for the system's.
+    @ObservationIgnored private var chosenLanguage: String?
 
     @ObservationIgnored private let box = RequestBox()
     @ObservationIgnored private var engine: AVAudioEngine?
@@ -51,11 +75,19 @@ final class VoiceRecorder {
     /// Monotonic seconds, for the scheduler.
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
+    /// Removes recordings an earlier run left in the temporary folder.
+    static func cleanUpLeftoverRecordings() {
+        AudioFileWriter.cleanUpLeftovers()
+    }
+
     /// Asks for the microphone and speech recognition permissions if needed, then starts listening.
-    /// Throws a `VoiceRecorderError` (or `CancellationError` if `cancel()` was called meanwhile).
-    func start() async throws {
+    /// With `recordAudio` the audio is also saved to a file for Gemini. `language` is the on-device
+    /// language chosen in Settings (nil for the system's). Throws a `VoiceRecorderError` (or
+    /// `CancellationError` if `cancel()` was called meanwhile).
+    func start(recordAudio: Bool = false, language: String? = nil) async throws {
         guard state == .idle else { return }
         state = .starting
+        chosenLanguage = language
         let id = recordingID
         do {
             let microphoneAllowed = await SpeechPermissions.microphone()
@@ -64,15 +96,15 @@ final class VoiceRecorder {
             let speechAllowed = await SpeechPermissions.speech()
             guard id == recordingID else { throw CancellationError() }
             guard speechAllowed else { throw VoiceRecorderError.speechDenied }
-            try beginListening()
+            try beginListening(recordAudio: recordAudio)
         } catch {
             if id == recordingID { cancel() }
             throw error
         }
     }
 
-    private func beginListening() throws {
-        guard let recognizer = Self.makeRecognizer(), recognizer.isAvailable else {
+    private func beginListening(recordAudio: Bool) throws {
+        guard let recognizer = Self.makeRecognizer(chosen: chosenLanguage), recognizer.isAvailable else {
             throw VoiceRecorderError.recognizerUnavailable
         }
         let engine = AVAudioEngine()
@@ -81,6 +113,12 @@ final class VoiceRecorder {
 
         self.recognizer = recognizer
         self.engine = engine
+        if recordAudio {
+            // If the file can't be created the recording goes on with Apple's text only.
+            let url = AudioFileWriter.folder.appending(path: "\(UUID().uuidString).aac")
+            writer = AudioFileWriter(url: url)
+            box.swapWriter(writer)
+        }
         scheduler.begin(at: now)
         beginSegment()
         box.installTap(on: engine.inputNode, format: format)
@@ -101,22 +139,51 @@ final class VoiceRecorder {
         startTicker()
     }
 
-    /// Stops listening, waits briefly for the recognizers' last words and returns the whole transcript.
-    func stop() async -> String {
-        guard state == .recording else { return "" }
+    /// Stops listening, waits briefly for the recognizers' last words and returns what Apple heard and
+    /// the audio file, if one was kept.
+    func stop() async -> Recording {
+        guard state == .recording else { return .empty }
         state = .finishing
         let id = recordingID
+        let writer = writer
+        self.writer = nil
         stopListening()
+        let audio = writer?.finish()
+        finishingAudio = audio
 
         let deadline = Date.now.addingTimeInterval(Self.finalWait)
         while transcript.hasPending, Date.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
         }
-        guard id == recordingID else { return "" }
+        finishingAudio = nil
+        guard id == recordingID else {
+            if let audio { try? FileManager.default.removeItem(at: audio.url) }
+            return .empty
+        }
 
         let text = transcript.text
+        let incomplete = appleStopped
         reset()
-        return text
+        return Recording(text: text, audioURL: audio?.url, duration: audio?.duration ?? 0, appleIncomplete: incomplete)
+    }
+
+    /// Like `stop()` but at once, without waiting for the recognizers' last words: for when the app
+    /// is quitting. What was recognized so far is returned.
+    func stopNow() -> Recording {
+        guard state == .recording || state == .finishing else { return .empty }
+        var audio = finishingAudio
+        if state == .recording {
+            let writer = writer
+            self.writer = nil
+            stopListening()
+            audio = writer?.finish()
+        }
+        finishingAudio = nil
+        let text = transcript.text
+        let incomplete = appleStopped || transcript.hasPending
+        recordingID += 1
+        reset()
+        return Recording(text: text, audioURL: audio?.url, duration: audio?.duration ?? 0, appleIncomplete: incomplete)
     }
 
     /// Throws the recording away.
@@ -138,6 +205,7 @@ final class VoiceRecorder {
         engine?.stop()
         engine?.inputNode.removeTap(onBus: 0)
         engine = nil
+        box.swapWriter(nil)
         box.swap(to: nil)?.endAudio()
     }
 
@@ -146,6 +214,10 @@ final class VoiceRecorder {
             task.cancel()
         }
         tasks = [:]
+        writer?.discard()
+        writer = nil
+        finishingAudio = nil
+        appleStopped = false
         transcript = SegmentedTranscript()
         recognizer = nil
         stopRequested = false
@@ -155,13 +227,15 @@ final class VoiceRecorder {
         state = .idle
     }
 
-    /// The recognizer for the user's language, or the system's default one.
-    private static func makeRecognizer() -> SFSpeechRecognizer? {
+    /// The recognizer for the language chosen in Settings, else the user's language, or the system's
+    /// default one.
+    private static func makeRecognizer(chosen: String?) -> SFSpeechRecognizer? {
         let supported = SFSpeechRecognizer.supportedLocales()
         let identifier = RecognizerLocale.choose(
             current: Locale.current.identifier,
             preferred: Locale.preferredLanguages,
-            supported: Set(supported.map(\.identifier))
+            supported: Set(supported.map(\.identifier)),
+            chosen: chosen
         )
         if let locale = supported.first(where: { $0.identifier == identifier }),
            let recognizer = SFSpeechRecognizer(locale: locale) {
@@ -230,6 +304,7 @@ final class VoiceRecorder {
 
     /// Moves the audio to a fresh request, then ends the old one so its recognizer can finish.
     private func rotate() {
+        guard !appleStopped else { return }
         scheduler.segmentStarted(at: now)
         beginSegment()?.endAudio()
     }
@@ -262,8 +337,20 @@ final class VoiceRecorder {
         case .autoStop:
             requestStop(nil)
         case .giveUp:
-            requestStop(.recognitionStopped)
+            if writer?.isWriting == true {
+                stopApple()
+            } else {
+                requestStop(.recognitionStopped)
+            }
         }
+    }
+
+    /// Apple's recognizer keeps failing, but the audio is being kept for Gemini, so the recording goes
+    /// on. Ends the audio of the last request and stops handing it new ones.
+    private func stopApple() {
+        guard !appleStopped else { return }
+        appleStopped = true
+        box.swap(to: nil)?.endAudio()
     }
 
     private func requestStop(_ error: VoiceRecorderError?) {
@@ -285,6 +372,10 @@ final class VoiceRecorder {
     /// Ten times a second: updates the level and lets the scheduler decide what to do.
     private func tick() {
         guard state == .recording else { return }
+        // With Apple's text gone, the audio file is all that is left; if that fails too, stop.
+        if appleStopped, writer?.isWriting != true {
+            requestStop(.recognitionStopped)
+        }
         let loudness = SegmentScheduler.loudness(rms: box.takePeak())
         level = max(loudness, level * 0.6)
         perform(scheduler.tick(at: now, loudness: loudness))

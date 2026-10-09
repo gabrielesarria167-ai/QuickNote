@@ -1,11 +1,42 @@
 import AppKit
 import SwiftUI
 
-/// What the pill shows besides the recording itself: an error, for a few seconds.
+/// What the pill shows besides the recording itself: an error or a notice for a few seconds, or
+/// the wait for Gemini.
 @MainActor
 @Observable
 final class RecordingPillModel {
+    struct Notice: Equatable {
+        var message: String
+        /// Offers a button that opens the Settings window.
+        var opensSettings: Bool
+        /// The recording was kept: the notice stays until dismissed and offers Retry and Show in Finder.
+        var keptRecording: Bool
+    }
+
+    /// Gemini is transcribing the recording.
+    struct Transcribing: Equatable {
+        enum Kind {
+            /// A fresh recording; ■ keeps Apple's text.
+            case normal
+            /// Apple's text is incomplete; ■ keeps the recording instead.
+            case appleIncomplete
+            /// A retry of a kept recording; ■ and ✕ both stop it and leave the recording where it is.
+            case retry
+        }
+
+        /// Apple's text, shown meanwhile.
+        var preview: String
+        var kind: Kind
+    }
+
     var error: VoiceRecorderError?
+    var notice: Notice?
+    var transcribing: Transcribing?
+    /// ✕ was pressed once while transcribing; pressing it again discards the recording.
+    var discardArmed = false
+    /// Counts the times the pill was asked to draw attention to itself.
+    var flashCount = 0
 }
 
 /// Small floating pill that shows a recording in progress. It never becomes key: taking key from the
@@ -15,8 +46,18 @@ final class RecordingPill: NSPanel {
 
     private let model = RecordingPillModel()
     private var hideTask: Task<Void, Never>?
+    private var disarmTask: Task<Void, Never>?
 
-    init(recorder: VoiceRecorder, onStop: @escaping () -> Void, onCancel: @escaping () -> Void) {
+    /// `onStop` is the ■ button: it saves a recording, or while Gemini transcribes it keeps the
+    /// on-device text. `onCancel` is ✕: it discards the recording or the transcription.
+    init(
+        recorder: VoiceRecorder,
+        onStop: @escaping () -> Void,
+        onCancel: @escaping () -> Void,
+        onOpenSettings: @escaping () -> Void,
+        onRetry: @escaping () -> Void,
+        onShowInFinder: @escaping () -> Void
+    ) {
         super.init(
             contentRect: NSRect(origin: .zero, size: Self.size),
             styleMask: [.nonactivatingPanel, .borderless],
@@ -38,6 +79,9 @@ final class RecordingPill: NSPanel {
                 model: model,
                 onStop: onStop,
                 onCancel: onCancel,
+                onOpenSettings: onOpenSettings,
+                onRetry: onRetry,
+                onShowInFinder: onShowInFinder,
                 onDismiss: { [weak self] in self?.dismiss() }
             )
         )
@@ -50,15 +94,46 @@ final class RecordingPill: NSPanel {
     /// `anchor` (the capture panel) if given, otherwise near the top of the screen.
     func showRecording(below anchor: NSRect?) {
         hideTask?.cancel()
-        model.error = nil
+        clearContent()
         setFrameOrigin(origin(below: anchor))
         orderFrontRegardless()
+    }
+
+    /// Shows that Gemini is transcribing the recording, with what Apple heard meanwhile.
+    func showTranscribing(preview: String, kind: RecordingPillModel.Transcribing.Kind) {
+        hideTask?.cancel()
+        clearContent()
+        model.transcribing = RecordingPillModel.Transcribing(preview: preview, kind: kind)
+        if !isVisible {
+            setFrameOrigin(origin(below: nil))
+        }
+        orderFrontRegardless()
+    }
+
+    /// Says why Gemini's answer wasn't used. A notice about a kept recording stays until dismissed;
+    /// one with a button for the Settings window stays longer than a plain one.
+    func showNotice(_ message: String, opensSettings: Bool, keptRecording: Bool = false) {
+        hideTask?.cancel()
+        clearContent()
+        model.notice = RecordingPillModel.Notice(message: message, opensSettings: opensSettings, keptRecording: keptRecording)
+        if !isVisible {
+            setFrameOrigin(origin(below: nil))
+        }
+        orderFrontRegardless()
+        guard !keptRecording else { return }
+        let seconds = opensSettings ? 8.0 : 5.0
+        hideTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self?.dismiss()
+        }
     }
 
     /// Shows why a recording couldn't start or had to stop. Permission errors stay long enough to act
     /// on; the others go after a few seconds.
     func showError(_ error: VoiceRecorderError) {
         hideTask?.cancel()
+        clearContent()
         model.error = error
         if !isVisible {
             setFrameOrigin(origin(below: nil))
@@ -72,10 +147,34 @@ final class RecordingPill: NSPanel {
         }
     }
 
+    /// Asks for the second ✕ press that discards a recording; forgotten after three seconds.
+    func armDiscard() {
+        model.discardArmed = true
+        disarmTask?.cancel()
+        disarmTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.model.discardArmed = false
+        }
+    }
+
+    /// A quick pulse, to say "not now" when a shortcut is pressed while the pill is busy.
+    func flash() {
+        model.flashCount += 1
+    }
+
     func dismiss() {
         hideTask?.cancel()
         orderOut(nil)
+        clearContent()
+    }
+
+    private func clearContent() {
+        disarmTask?.cancel()
         model.error = nil
+        model.notice = nil
+        model.transcribing = nil
+        model.discardArmed = false
     }
 
     private func origin(below anchor: NSRect?) -> NSPoint {
@@ -108,14 +207,20 @@ private struct RecordingPillView: View {
     let model: RecordingPillModel
     let onStop: () -> Void
     let onCancel: () -> Void
+    let onOpenSettings: () -> Void
+    let onRetry: () -> Void
+    let onShowInFinder: () -> Void
     let onDismiss: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulsing = false
 
     var body: some View {
         Group {
             if let error = model.error {
                 errorBody(error)
+            } else if let notice = model.notice {
+                noticeBody(notice)
             } else {
                 recordingBody
             }
@@ -124,12 +229,31 @@ private struct RecordingPillView: View {
         .frame(width: RecordingPill.size.width, height: RecordingPill.size.height)
         .background(.regularMaterial)
         .clipShape(.rect(cornerRadius: 14))
+        .scaleEffect(pulsing ? 1.04 : 1)
+        .onChange(of: model.flashCount) {
+            guard !reduceMotion else { return }
+            pulsing = true
+            withAnimation(.easeOut(duration: 0.3)) { pulsing = false }
+        }
     }
 
-    private var isBusy: Bool { recorder.state == .starting || recorder.state == .finishing }
+    private var isTranscribing: Bool { model.transcribing != nil }
+
+    private var stopLabel: String {
+        switch model.transcribing?.kind {
+        case nil: "Stop and save"
+        case .normal: "Use on-device text"
+        case .appleIncomplete, .retry: "Stop waiting — keep the recording"
+        }
+    }
+
+    private var isBusy: Bool {
+        !isTranscribing && (recorder.state == .starting || recorder.state == .finishing)
+    }
 
     private var stateText: String {
-        switch recorder.state {
+        if isTranscribing { return "Transcribing…" }
+        return switch recorder.state {
         case .starting: "Starting…"
         case .finishing: "Saving…"
         default: "Recording"
@@ -140,7 +264,7 @@ private struct RecordingPillView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 HStack(spacing: 8) {
-                    if isBusy {
+                    if isBusy || isTranscribing {
                         ProgressView().controlSize(.small)
                     } else {
                         Image(systemName: "circle.fill")
@@ -161,31 +285,87 @@ private struct RecordingPillView: View {
                 }
                 .accessibilityElement(children: .combine)
                 Spacer()
-                Button("Stop and save", systemImage: "stop.fill", action: onStop)
-                    .help("Stop and save")
+                Button(stopLabel, systemImage: "stop.fill", action: onStop)
+                    .help(stopLabel)
                     .disabled(isBusy)
                 Button("Discard", systemImage: "xmark", action: onCancel)
                     .help(recorder.state == .starting ? "Cancel" : "Discard")
-                    .disabled(recorder.state == .finishing)
+                    .disabled(!isTranscribing && recorder.state == .finishing)
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
 
             Text(bodyText)
                 .font(.callout)
-                .foregroundStyle(recorder.liveText.isEmpty ? .secondary : .primary)
+                .foregroundStyle(bodyIsPlaceholder ? .secondary : .primary)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
 
-            Text(recorder.state == .starting ? "✕ cancels" : "⌃⌥R saves · ✕ discards")
+            Text(hintText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
     private var bodyText: String {
+        if let preview = model.transcribing?.preview {
+            return preview.isEmpty ? "Waiting for Gemini…" : preview.endingExcerpt()
+        }
+        if recorder.appleStopped { return "Listening — text after you stop" }
         if !recorder.liveText.isEmpty { return recorder.liveText.endingExcerpt() }
         return recorder.state == .recording ? "Listening…" : ""
+    }
+
+    private var bodyIsPlaceholder: Bool {
+        if let preview = model.transcribing?.preview { return preview.isEmpty }
+        return recorder.appleStopped || recorder.liveText.isEmpty
+    }
+
+    private var hintText: String {
+        switch model.transcribing?.kind {
+        case .normal:
+            return model.discardArmed ? "Press ✕ again to discard" : "✕ discards · ■ keeps on-device text"
+        case .appleIncomplete:
+            return model.discardArmed ? "Press ✕ again to discard" : "✕ discards · ■ stops waiting, keeps the recording"
+        case .retry:
+            return "✕ or ■ stops · the recording stays saved"
+        case nil:
+            break
+        }
+        return recorder.state == .starting ? "✕ cancels" : "⌃⌥R saves · ✕ discards"
+    }
+
+    private func noticeBody(_ notice: RecordingPillModel.Notice) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+                Text(notice.message)
+                    .font(.callout)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Spacer(minLength: 0)
+            HStack {
+                if notice.keptRecording {
+                    Button("Retry", action: onRetry)
+                    Button("Show in Finder", action: onShowInFinder)
+                }
+                if notice.opensSettings {
+                    Button("Open Settings") {
+                        onOpenSettings()
+                        // A kept recording's notice stays, so Retry is there once the key is fixed.
+                        if !notice.keptRecording { onDismiss() }
+                    }
+                }
+                Spacer()
+                Button("Dismiss", systemImage: "xmark", action: onDismiss)
+                    .labelStyle(.iconOnly)
+                    .help("Dismiss")
+            }
+            .buttonStyle(.borderless)
+        }
     }
 
     private func errorBody(_ error: VoiceRecorderError) -> some View {
