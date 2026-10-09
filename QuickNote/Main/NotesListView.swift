@@ -37,12 +37,12 @@ struct NotesListView: View {
             .toolbar {
                 Button("New Note", systemImage: "square.and.pencil", action: newNote)
                     .keyboardShortcut("n")
-                Button(
-                    voice.isRecording ? "Stop Recording" : "Record Voice Note",
-                    systemImage: voice.isRecording ? "stop.fill" : "mic",
-                    action: recordVoiceNote
-                )
-                .tint(voice.isRecording ? .red : nil)
+                Button(action: recordVoiceNote) {
+                    Image(systemName: voice.isRecording ? "stop.fill" : "mic")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(voice.isRecording ? Color.red : Color.primary)
+                }
+                .accessibilityLabel(voice.isRecording ? "Stop Recording" : "Record Voice Note")
                 .help("Record a voice note (⌃⌥R)")
             }
         } detail: {

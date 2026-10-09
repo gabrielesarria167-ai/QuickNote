@@ -35,22 +35,21 @@ final class HotkeyMonitor {
         }
     }
 
-    /// Returns true if the event was ⌃⌥R. Only the local monitor can act on that (by dropping the event);
+    /// Returns true if the event was ⌃⌥R (repeats included). Only the local monitor can act on that (by dropping the event);
     /// a global monitor can't consume events.
     private func handle(_ event: NSEvent) -> Bool {
         switch event.type {
         case .keyDown:
             // First, so that any key cancels a ⌃⌥ tap in progress, ⌃⌥R included.
             detector.keyPressed()
-            let isRecordShortcut = RecordShortcut.matches(
-                held: ModifierKeys(event.modifierFlags),
-                key: event.charactersIgnoringModifiers,
-                isRepeat: event.isARepeat
-            )
-            if isRecordShortcut {
+            let held = ModifierKeys(event.modifierFlags)
+            let key = event.charactersIgnoringModifiers
+            guard RecordShortcut.isShortcut(held: held, key: key) else { return false }
+            // Holding the keys down repeats the key press: dropped, but it must not toggle again.
+            if RecordShortcut.matches(held: held, key: key, isRepeat: event.isARepeat) {
                 onRecord()
             }
-            return isRecordShortcut
+            return true
         case .flagsChanged:
             if detector.modifiersChanged(to: ModifierKeys(event.modifierFlags), at: event.timestamp) {
                 onTrigger()

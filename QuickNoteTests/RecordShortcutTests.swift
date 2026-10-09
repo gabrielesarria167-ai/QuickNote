@@ -12,6 +12,12 @@ struct RecordShortcutTests {
         RecordShortcut.matches(held: held, key: key, isRepeat: isRepeat)
     }
 
+    @Test func repeatsAreStillTheShortcutSoTheyCanBeKeptOutOfTextViews() {
+        #expect(RecordShortcut.isShortcut(held: [.control, .option], key: "r"))
+        #expect(!RecordShortcut.isShortcut(held: [.control, .option, .shift], key: "r"))
+        #expect(!RecordShortcut.isShortcut(held: [.control, .option], key: "t"))
+    }
+
     @Test func controlOptionRMatches() {
         #expect(matches([.control, .option], "r"))
     }

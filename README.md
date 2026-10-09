@@ -15,8 +15,8 @@ Neither character is typed when you press them together. Typed on their own, `.`
 back for 70 ms to see whether the other key joins it, too short to notice.
 
 ### Voice notes
-Press **⌃⌥R** from any app to dictate a note; a small pill at the top of the screen shows the level, the time and
-the words as they're recognized. Press **⌃⌥R** again (or the pill's ■) to stop and save; ✕ throws the recording away.
+Press **⌃⌥R** from any app to dictate a note; a small pill near the top of the screen (just under the capture
+panel when that's open) shows the level, the time and the words as they're recognized. Press **⌃⌥R** again (or the pill's ■) to stop and save; ✕ throws the recording away.
 The transcript goes to:
 
 - the note shown in the capture panel, **appended** as a new paragraph, if the panel is open when you start;
@@ -26,13 +26,16 @@ The transcript goes to:
 The main window also has a mic button next to *New Note*: it records into the selected note, or makes a new one.
 
 Recognition uses Apple's Speech framework in your system language, **on your Mac** when the language supports it
-(otherwise Apple's servers). Long recordings work: the audio is chained across several recognition requests,
-switching at a pause after 45 s (at 55 s regardless), with no gap and no repeated words. A recording stops by
-itself after 30 minutes.
+(otherwise Apple's servers). Apple limits each recognition request to about a minute, so a long recording is
+stitched together from several: the audio moves to a fresh request at a pause after 45 s (at 55 s regardless),
+and the words are put back in order. A long pause or a stitch can occasionally add a full stop where you didn't
+pause. A recording stops by itself after 30 minutes. If you unplug the microphone it switches to the new
+microphone, or stops and saves if none is left; the same if the recognizer keeps failing.
 
 The first recording asks for **Microphone** and **Speech Recognition** access. Allow both under System Settings →
 Privacy & Security; the pill tells you where if one is off. The permission prompt takes focus from the capture
-panel and closes it (saving what you typed), so the first transcript becomes a new note instead of joining it.
+panel and closes it (saving what you typed), so that first transcript is added to the note the panel was on, or
+becomes a new note if it was on the new one.
 
 ### Formatting
 Notes are plain Markdown, shown styled as you type: once a style is complete its marks are hidden, and a list of them sits under the editor. The caret steps over hidden marks, and backspace after a bullet, to-do or title mark turns the line back into plain text.
@@ -127,17 +130,20 @@ The app icon is drawn in `scripts/icon.svg`; `swift scripts/make_icon.swift` ren
 | `.` + `-` chord detection (pure, unit tested) | `QuickNote/Hotkey/KeyChordDetector.swift` |
 | ⌃⌥R detection (pure, unit tested) | `QuickNote/Hotkey/RecordShortcut.swift` |
 | Floating capture panel + note rotation | `QuickNote/Capture/` |
-| Transcript joining, chosen destination (pure, unit tested) | `QuickNote/Voice/TranscriptAccumulator.swift`, `RecordTarget.swift` |
-| Microphone + speech recognition, chained across long recordings | `QuickNote/Voice/VoiceRecorder.swift` |
+| Stitching the pieces of a long recording, when to switch (pure, unit tested) | `QuickNote/Voice/SegmentedTranscript.swift`, `SegmentScheduler.swift` |
+| Where a recording goes, language choice, pill text (pure, unit tested) | `QuickNote/Voice/RecordTarget.swift`, `RecognizerLocale.swift`, `TranscriptExcerpt.swift` |
+| Microphone + speech recognition | `QuickNote/Voice/VoiceRecorder.swift`, `AudioTap.swift`, `SpeechPermissions.swift` |
 | Recording pill (never key, so the panel stays open) | `QuickNote/Voice/RecordingPill.swift` |
-| Where a recording goes, saving it | `QuickNote/Voice/VoiceCaptureController.swift` |
-| Which note the main window shows | `QuickNote/Voice/OpenNoteTracker.swift` |
+| Starting/stopping a recording, saving the transcript | `QuickNote/Voice/VoiceCaptureController.swift` |
+| Which note the main window shows | `QuickNote/Voice/OpenNoteTracker.swift`, `QuickNote/Main/WindowReader.swift` |
+| Adding a paragraph to note text (pure, unit tested) | `QuickNote/Model/NoteText.swift` |
 | Markdown parser (pure, unit tested), styled editor, selection toolbar | `QuickNote/Editor/` |
 | Notes list + editor | `QuickNote/Main/` |
 | SwiftData model | `QuickNote/Model/Note.swift` |
 
-- Keys are only *observed*, never swallowed: every key still reaches the app you're typing in. The one exception
-  is ⌃⌥R pressed inside QuickNote, which would otherwise be typed into the editor.
+- Keys are only *observed*, never swallowed: every key still reaches the app you're typing in. ⌃⌥R is observed
+  too, so in other apps they receive it as well (most ignore ⌃⌥R). Only inside QuickNote it is dropped, so it isn't
+  typed into the editor.
 - ⌃⌥ counts as a **tap**: the panel opens when you release them, only if no other key (or ⇧/⌘) was pressed
   while they were held and the whole tap took ≤ 0.8 s. Shortcuts that start with ⌃⌥ (⌃⌥→ in window managers,
   VoiceOver commands) keep working and never open the panel.

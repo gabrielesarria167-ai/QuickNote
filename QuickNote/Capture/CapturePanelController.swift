@@ -54,10 +54,34 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    /// Adds a voice transcript to the end of the note being shown, as a new paragraph. Goes through
-    /// `draft.text` only: `stashEditorText()` copies that back to the note when you move on or close.
-    func appendTranscript(_ text: String) {
-        draft.text = TranscriptAccumulator.appending(text, to: draft.text)
+    /// The note the panel is showing, or nil for the new note (or when it's closed).
+    var shownNote: Note? {
+        position > 0 && position <= olderNotes.count ? olderNotes[position - 1] : nil
+    }
+
+    /// Where the panel is on screen, or nil when it's closed.
+    var frame: NSRect? { panel.isVisible ? panel.frame : nil }
+
+    /// Whether the panel is open on this note.
+    func isShowing(_ note: Note) -> Bool {
+        isOpen && shownNote === note
+    }
+
+    /// Adds a voice transcript as a new paragraph to the note the panel showed when the recording
+    /// began (an older note, or the new note if `note` is nil), wherever it is now. What's on screen
+    /// goes through `draft.text`, which `stashEditorText()` copies back to the note when you move on
+    /// or close. A note that's out of sight is changed directly: `stashEditorText()` only ever writes
+    /// the one being shown, so it can't overwrite this.
+    func appendTranscript(_ text: String, to note: Note?) {
+        if shownNote === note {
+            draft.text = draft.text.appendingParagraph(text)
+        } else if let note {
+            note.text = note.text.appendingParagraph(text)
+            note.updatedAt = .now
+            try? container.mainContext.save()
+        } else {
+            newNoteText = newNoteText.appendingParagraph(text)
+        }
     }
 
     /// Steps back to the next older note, wrapping around to the new note
