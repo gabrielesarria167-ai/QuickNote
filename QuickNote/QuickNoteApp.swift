@@ -60,7 +60,17 @@ private struct MenuBarContent: View {
             NSApp.activate()
         }
         if voice.unsentCount > 0 {
-            Button("Unsent Recordings (\(voice.unsentCount))…") { voice.showUnsentRecordings() }
+            Menu("Unsent Recordings") {
+                ForEach(voice.unsent, id: \.url) { recording in
+                    Button(UnsentRecordings.menuLabel(date: recording.date, duration: recording.duration)) {
+                        voice.resume(recording)
+                    }
+                }
+                Divider()
+                Button("Transcribe All") { voice.resumeAll() }
+                Button("Show in Finder") { voice.showUnsentRecordings() }
+            }
+            .disabled(voice.isRecording)
         }
         Button("Settings…", action: showSettings)
             .keyboardShortcut(",")

@@ -27,8 +27,6 @@ final class RecordingPillModel {
             case retry
         }
 
-        /// Apple's text, shown meanwhile.
-        var preview: String
         var kind: Kind
     }
 
@@ -117,11 +115,11 @@ final class RecordingPill: NSPanel {
         orderFrontRegardless()
     }
 
-    /// Shows that Gemini is transcribing the recording, with what Apple heard meanwhile.
-    func showTranscribing(preview: String, kind: RecordingPillModel.Transcribing.Kind) {
+    /// Shows that Gemini is transcribing the recording.
+    func showTranscribing(kind: RecordingPillModel.Transcribing.Kind) {
         hideTask?.cancel()
         clearContent()
-        model.transcribing = RecordingPillModel.Transcribing(preview: preview, kind: kind)
+        model.transcribing = RecordingPillModel.Transcribing(kind: kind)
         if !isVisible {
             place(at: origin(below: nil))
         }
@@ -385,16 +383,14 @@ private struct RecordingPillView: View {
     }
 
     private var bodyText: String {
-        if let preview = model.transcribing?.preview {
-            return preview.isEmpty ? "Waiting for Gemini…" : preview.endingExcerpt()
-        }
+        if isTranscribing { return "Waiting for Gemini…" }
         if recorder.appleStopped { return "Listening — text after you stop" }
         if !recorder.liveText.isEmpty { return recorder.liveText.endingExcerpt() }
         return recorder.state == .recording ? "Listening…" : ""
     }
 
     private var bodyIsPlaceholder: Bool {
-        if let preview = model.transcribing?.preview { return preview.isEmpty }
+        if isTranscribing { return true }
         return recorder.appleStopped || recorder.liveText.isEmpty
     }
 
