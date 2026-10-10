@@ -7,7 +7,7 @@ struct AudioFileWriterTests {
     private func tempURL() -> URL {
         FileManager.default.temporaryDirectory
             .appending(path: "AudioFileWriterTests-\(UUID().uuidString)", directoryHint: .isDirectory)
-            .appending(path: "test.aac")
+            .appending(path: "test.flac")
     }
 
     /// A sine wave of `seconds` length in the standard (Float32, non-interleaved) format.
@@ -25,7 +25,7 @@ struct AudioFileWriterTests {
         return buffer
     }
 
-    @Test func writesA16kHzMonoFileFromChangingInputFormats() throws {
+    @Test func writesALosslessFLACFileFromChangingInputFormats() throws {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let writer = try #require(AudioFileWriter(url: url))
@@ -40,10 +40,58 @@ struct AudioFileWriterTests {
         #expect(abs(result.duration - 4) < 0.3)
 
         let file = try AVAudioFile(forReading: url)
-        #expect(file.processingFormat.sampleRate == 24_000)
+        #expect(file.processingFormat.sampleRate == 16_000)
         #expect(file.processingFormat.channelCount == 1)
+        #expect(url.pathExtension == "flac")
+        #expect(file.fileFormat.streamDescription.pointee.mFormatID == kAudioFormatFLAC)
         let seconds = Double(file.length) / file.processingFormat.sampleRate
         #expect(abs(seconds - 4) < 0.5)
+    }
+
+    @Test func theAACFallbackWritesA24kHzMonoFileWithAnAACExtension() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let writer = try #require(AudioFileWriter(url: url, lossless: false))
+        writer.append(sine(sampleRate: 48_000, channels: 2, seconds: 2))
+        let result = try #require(writer.finish())
+
+        #expect(result.url.pathExtension == "aac")
+        #expect(abs(result.duration - 2) < 0.3)
+        let file = try AVAudioFile(forReading: result.url)
+        #expect(file.processingFormat.sampleRate == 24_000)
+        #expect(file.processingFormat.channelCount == 1)
+    }
+
+    @Test func anUnclosedFLACIsRepairedSoItOpens() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let writer = try #require(AudioFileWriter(url: url))
+        writer.append(sine(sampleRate: 48_000, channels: 1, seconds: 2))
+        _ = try #require(writer.finish())
+
+        // What a file that was never closed looks like: everything after "fLaC" is still zero.
+        var bytes = try Data(contentsOf: url)
+        for index in 4..<42 { bytes[index] = 0 }
+        try bytes.write(to: url)
+        #expect((try? AVAudioFile(forReading: url)) == nil)
+
+        #expect(AudioFileWriter.repairFLAC(url) == .opens)
+        let file = try AVAudioFile(forReading: url)
+        #expect(file.processingFormat.channelCount == 1)
+        #expect(file.processingFormat.sampleRate == 16_000)
+    }
+
+    @Test func aLeftoverFLACThatCantBeRepairedIsNotKept() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "AudioFileWriterTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let leftovers = root.appending(path: "Recordings", directoryHint: .isDirectory)
+        let unsent = root.appending(path: "Unsent", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: leftovers, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 10_000).write(to: leftovers.appending(path: "junk.flac"))
+
+        AudioFileWriter.cleanUpLeftovers(from: leftovers, into: unsent)
+
+        #expect(UnsentRecordings.count(in: unsent) == 0)
     }
 
     @Test func theFileHasSoundInIt() throws {

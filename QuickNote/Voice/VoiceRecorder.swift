@@ -81,6 +81,7 @@ final class VoiceRecorder {
     /// Removes recordings an earlier run left in the temporary folder.
     static func cleanUpLeftoverRecordings() {
         AudioFileWriter.cleanUpLeftovers()
+        GeminiAudio.clearTemporaryFiles()
     }
 
     /// Asks for the microphone and speech recognition permissions if needed, then starts listening.
@@ -118,7 +119,7 @@ final class VoiceRecorder {
         self.engine = engine
         if recordAudio {
             // If the file can't be created the recording goes on with Apple's text only.
-            let url = AudioFileWriter.folder.appending(path: "\(UUID().uuidString).aac")
+            let url = AudioFileWriter.folder.appending(path: "\(UUID().uuidString).flac")
             writer = AudioFileWriter(url: url)
             box.swapWriter(writer)
         }

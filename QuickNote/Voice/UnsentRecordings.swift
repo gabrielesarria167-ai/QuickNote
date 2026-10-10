@@ -40,17 +40,18 @@ enum UnsentRecordings {
         appleIncomplete
     }
 
-    /// File name for a recording made at `date`: `2026-10-10 14.03.22.aac`, with ` 2`, ` 3`… added
-    /// if `taken` already has it. No colons, which Finder shows as slashes.
-    static func fileName(for date: Date, taken: Set<String> = []) -> String {
+    /// File name for a recording made at `date`: `2026-10-10 14.03.22.flac`, with ` 2`, ` 3`… added
+    /// if `taken` already has it. No colons, which Finder shows as slashes. `fileExtension` is the
+    /// recording's own (flac, or aac for the fallback format).
+    static func fileName(for date: Date, taken: Set<String> = [], fileExtension: String = "aac") -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
         let base = formatter.string(from: date)
-        var name = base + ".aac"
+        var name = "\(base).\(fileExtension)"
         var number = 2
         while taken.contains(name) {
-            name = "\(base) \(number).aac"
+            name = "\(base) \(number).\(fileExtension)"
             number += 1
         }
         return name
@@ -63,7 +64,7 @@ enum UnsentRecordings {
         do {
             try manager.createDirectory(at: folder, withIntermediateDirectories: true)
             let taken = Set((try? manager.contentsOfDirectory(atPath: folder.path)) ?? [])
-            let destination = folder.appending(path: fileName(for: date, taken: taken))
+            let destination = folder.appending(path: fileName(for: date, taken: taken, fileExtension: url.pathExtension.isEmpty ? "aac" : url.pathExtension))
             try manager.moveItem(at: url, to: destination)
             return destination
         } catch {
@@ -74,6 +75,6 @@ enum UnsentRecordings {
     /// How many recordings are waiting.
     static func count(in folder: URL = UnsentRecordings.folder) -> Int {
         let items = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-        return items.filter { $0.hasSuffix(".aac") }.count
+        return items.filter { $0.hasSuffix(".flac") || $0.hasSuffix(".aac") }.count
     }
 }

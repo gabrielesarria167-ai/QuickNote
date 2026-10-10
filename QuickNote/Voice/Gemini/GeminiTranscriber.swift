@@ -15,16 +15,19 @@ struct GeminiTranscriber: Sendable {
     /// (`.quota`, `.server`). Reads the file and builds the request off the main actor.
     ///
     /// Throws `GeminiError` for every failure Gemini or the network can cause (an unreadable or empty
-    /// file is `.empty`, a file too big for one request `.tooLarge`), and `CancellationError` if the
-    /// task is cancelled, so callers can tell "the user gave up" from "it failed".
+    /// file is `.empty`, a recording too big for one request even as AAC `.tooLarge`), and
+    /// `CancellationError` if the task is cancelled, so callers can tell "the user gave up" from "it failed".
     @concurrent func transcribe(
         audioURL: URL,
-        mimeType: String = "audio/aac",
         duration: TimeInterval,
         apiKey: String,
         model: String
     ) async throws -> Transcription {
-        guard let audio = try? Data(contentsOf: audioURL, options: .mappedIfSafe), !audio.isEmpty else {
+        // The recording as it is, or a smaller AAC copy if it is too big for one request. The copy is
+        // deleted afterwards; the recording itself stays untouched (it may be kept for Retry).
+        let prepared = try await GeminiAudio.prepare(audioURL, duration: duration)
+        defer { prepared.cleanUp() }
+        guard let audio = try? Data(contentsOf: prepared.url, options: .mappedIfSafe), !audio.isEmpty else {
             throw GeminiError.empty
         }
         guard GeminiLimits.fitsInline(audioBytes: audio.count) else {
@@ -32,7 +35,7 @@ struct GeminiTranscriber: Sendable {
         }
         let body = try? GeminiRequest.body(
             audio: audio,
-            mimeType: mimeType,
+            mimeType: prepared.mimeType,
             prompt: GeminiRequest.prompt,
             maxOutputTokens: GeminiLimits.maxOutputTokens(forAudioSeconds: duration, model: model),
             model: model

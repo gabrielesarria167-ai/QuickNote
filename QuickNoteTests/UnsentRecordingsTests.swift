@@ -11,6 +11,11 @@ struct UnsentRecordingsTests {
         FileManager.default.temporaryDirectory.appending(path: "UnsentRecordingsTests-\(UUID().uuidString)", directoryHint: .isDirectory)
     }
 
+    @Test func theFileNameKeepsTheRecordingsExtension() {
+        let taken: Set<String> = ["2026-10-10 14.03.22.flac"]
+        #expect(UnsentRecordings.fileName(for: date(14, 3, 22), taken: taken, fileExtension: "flac") == "2026-10-10 14.03.22 2.flac")
+    }
+
     @Test func fileNamesAreTheTimeWithoutColons() {
         #expect(UnsentRecordings.fileName(for: date(14, 3, 22)) == "2026-10-10 14.03.22.aac")
         #expect(UnsentRecordings.fileName(for: date(9, 5, 7)) == "2026-10-10 09.05.07.aac")
