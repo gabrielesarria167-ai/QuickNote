@@ -48,7 +48,10 @@ final class VoiceRecorder {
     @ObservationIgnored var onStopRequested: ((VoiceRecorderError?) -> Void)?
 
     /// How long `stop()` waits for the recognizers' last words.
-    private static let finalWait: TimeInterval = 2
+    private static let finalWait: TimeInterval = 4
+
+    /// How long the microphone stays open after stop, so the last word isn't cut off.
+    private static let tailDuration: Duration = .milliseconds(500)
 
     @ObservationIgnored private var transcript = SegmentedTranscript()
     @ObservationIgnored private var scheduler = SegmentScheduler()
@@ -145,6 +148,10 @@ final class VoiceRecorder {
         guard state == .recording else { return .empty }
         state = .finishing
         let id = recordingID
+        // The last word is often still being said or sitting in a buffer when the key is pressed, so
+        // the microphone stays open a moment. Cancelling meanwhile has already cleaned everything up.
+        try? await Task.sleep(for: Self.tailDuration)
+        guard id == recordingID else { return .empty }
         let writer = writer
         self.writer = nil
         stopListening()
@@ -172,7 +179,8 @@ final class VoiceRecorder {
     func stopNow() -> Recording {
         guard state == .recording || state == .finishing else { return .empty }
         var audio = finishingAudio
-        if state == .recording {
+        // Still in the short wait before the microphone closes: nothing has been stopped yet.
+        if state == .recording || (state == .finishing && engine != nil) {
             let writer = writer
             self.writer = nil
             stopListening()

@@ -33,10 +33,19 @@ struct GeminiRequest: Encodable {
         var propertyOrdering: [String]
     }
 
+    /// How much the model may think before answering. Thinking counts against the output tokens and
+    /// slows the reply, and a transcript needs none of it. Exactly one of the two is set.
+    struct ThinkingConfig: Encodable {
+        var thinkingLevel: String?
+        var thinkingBudget: Int?
+    }
+
     struct GenerationConfig: Encodable {
         var responseMimeType: String
         var responseSchema: Schema
         var maxOutputTokens: Int
+        /// Left out of the JSON when nil.
+        var thinkingConfig: ThinkingConfig?
     }
 
     var contents: [Content]
@@ -48,16 +57,29 @@ struct GeminiRequest: Encodable {
     static let prompt = """
         Transcribe the audio verbatim, in the language or languages actually spoken. Never translate. \
         If the speaker switches language, keep each part in the language it was spoken in.
+        Transcribe every word from the very start to the very end of the audio. Never summarize, \
+        shorten or skip anything, even when the speech is fast. Keep repeated words and false starts. \
+        If a word is unclear, write your best guess.
         The transcript is plain text only: no Markdown, no speaker labels, no timestamps. \
         Start a new paragraph when the speaker changes or after a long pause. \
-        Leave out filler sounds such as "um" and "uh". \
+        The only words you may leave out are filler sounds such as "um" and "uh". \
         If there is no speech, return an empty transcript.
         The title is a short descriptive title of at most 8 words, in the main language spoken, \
         with no quotes and no trailing period.
         """
 
-    /// The JSON body for one recording.
-    static func body(audio: Data, mimeType: String, prompt: String, maxOutputTokens: Int) throws -> Data {
+    /// The least thinking the model allows, or nil when it is unknown whether it accepts the setting
+    /// (a model id typed by hand): sending a field a model rejects would fail the whole request.
+    /// Gemini 3 models take a level, 2.5 Flash models a budget of 0; 2.5 Pro can't switch thinking off.
+    static func thinkingConfig(forModel model: String) -> ThinkingConfig? {
+        let id = normalizedModel(model).lowercased()
+        if id.hasPrefix("gemini-3") { return ThinkingConfig(thinkingLevel: "low") }
+        if id.hasPrefix("gemini-2.5-flash") { return ThinkingConfig(thinkingBudget: 0) }
+        return nil
+    }
+
+    /// The JSON body for one recording. `model` decides whether thinking is turned down.
+    static func body(audio: Data, mimeType: String, prompt: String, maxOutputTokens: Int, model: String = "") throws -> Data {
         let request = GeminiRequest(
             contents: [
                 Content(role: "user", parts: [
@@ -71,9 +93,10 @@ struct GeminiRequest: Encodable {
                     type: "OBJECT",
                     properties: ["title": SchemaField(type: "STRING"), "transcript": SchemaField(type: "STRING")],
                     required: ["title", "transcript"],
-                    propertyOrdering: ["title", "transcript"]
+                    propertyOrdering: ["transcript", "title"]
                 ),
-                maxOutputTokens: maxOutputTokens
+                maxOutputTokens: maxOutputTokens,
+                thinkingConfig: thinkingConfig(forModel: model)
             )
         )
         let encoder = JSONEncoder()

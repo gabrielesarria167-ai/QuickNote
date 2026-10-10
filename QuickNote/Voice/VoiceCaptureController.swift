@@ -98,6 +98,7 @@ final class VoiceCaptureController {
         self.openNote = openNote
         self.settings = settings
         self.openSettings = openSettings
+        SaveNotifier.shared.activate()
         recorder.onStopRequested = { [weak self] error in self?.finish(error: error) }
     }
 
@@ -146,6 +147,8 @@ final class VoiceCaptureController {
             guard id == startID else { return }
             do {
                 try await recorder.start(recordAudio: recordAudio, language: language)
+                // After the microphone and speech prompts, so they don't pile up.
+                SaveNotifier.shared.requestPermission()
             } catch is CancellationError {
                 // Cancelled while waiting for permission; nothing to show.
             } catch let error as VoiceRecorderError {
@@ -218,9 +221,18 @@ final class VoiceCaptureController {
         transcribeTask = Task {
             let result: Result<Transcription, GeminiError>
             do {
-                let transcription = try await GeminiTranscriber().transcribe(
+                let transcriber = GeminiTranscriber()
+                var transcription = try await transcriber.transcribe(
                     audioURL: pending.audioURL, duration: pending.duration, apiKey: key, model: model
                 )
+                // Far fewer words than Apple heard: the answer probably stopped early. Ask once more
+                // and take the longer one; if the retry fails the first answer stands.
+                if TranscriptChoice.looksCutShort(gemini: transcription.transcript, apple: pending.apple),
+                   let again = try? await transcriber.transcribe(
+                       audioURL: pending.audioURL, duration: pending.duration, apiKey: key, model: model
+                   ) {
+                    transcription = TranscriptChoice.longer(transcription, again)
+                }
                 result = .success(transcription)
             } catch let error as GeminiError {
                 result = .failure(error)
@@ -243,6 +255,10 @@ final class VoiceCaptureController {
         if UnsentRecordings.shouldKeep(after: result, appleIncomplete: pending.appleIncomplete, duration: pending.duration),
            case .failure(let error) = result {
             kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, reason: .gemini(error))
+        } else if case .success(let transcription) = result,
+                  TranscriptChoice.looksCutShort(gemini: transcription.transcript, apple: pending.apple) {
+            // Still short after the retry: the longer text is saved, and the audio stays for Retry.
+            kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, reason: .incomplete)
         } else {
             try? FileManager.default.removeItem(at: pending.audioURL)
         }
@@ -260,7 +276,10 @@ final class VoiceCaptureController {
     ) {
         let choice = TranscriptChoice.choose(gemini: gemini, apple: apple)
         let composed = VoiceNoteText.compose(title: choice.title, transcript: choice.text)
-        save(composed, to: target)
+        let saved = save(composed, to: target)
+        if saved == .elsewhere {
+            SaveNotifier.shared.notifySaved(title: choice.title, text: choice.text, onDevice: choice.notice != nil)
+        }
         lastKept = kept
         refreshUnsentCount()
 
@@ -269,7 +288,9 @@ final class VoiceCaptureController {
             pill.showNotice(
                 GeminiNotice.keptMessage(for: kept.reason, savedOnDevice: !nothingHeard, recordingKept: kept.isSafe),
                 opensSettings: GeminiNotice.offersSettings(for: kept.reason),
-                keptRecording: true
+                keptRecording: true,
+                // A second answer would be added to the note as a duplicate transcript.
+                canRetry: kept.reason != .incomplete
             )
         } else if let error {
             pill.showError(error == .recognitionStopped && nothingHeard ? .recognitionNotWorking : error)
@@ -347,11 +368,12 @@ final class VoiceCaptureController {
         return Kept(url: moved ?? url, duration: duration, target: target, reason: reason, isSafe: moved != nil)
     }
 
-    /// The pill's Retry: sends the kept recording to Gemini again. The text goes to the same target as
+    /// The pill's Retry: sends the kept recording to Gemini again. Not offered for `.incomplete`: that
+    /// note already holds Gemini's text, and a second answer would only be a duplicate under it. The text goes to the same target as
     /// before, through the usual fallbacks; a note that already got Apple's text gets Gemini's as its
     /// own `# Title` block below it (a new recording's target `.newNote` becomes a second note).
     private func retry() {
-        guard let kept = lastKept, !isRecording else { return }
+        guard let kept = lastKept, kept.reason != .incomplete, !isRecording else { return }
         let key: String?
         do {
             key = try settings.readKey()
@@ -420,9 +442,19 @@ final class VoiceCaptureController {
         pill.dismiss()
     }
 
-    private func save(_ transcript: String, to target: RecordTarget<Note>) {
+    /// Where `save` put the text.
+    private enum Saved {
+        case nothing
+        /// Into the capture panel, which shows it to the user.
+        case inPanel
+        /// Into a note that isn't on screen in the panel.
+        case elsewhere
+    }
+
+    @discardableResult
+    private func save(_ transcript: String, to target: RecordTarget<Note>) -> Saved {
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else { return .nothing }
 
         switch target {
         case .panel(let session, let note):
@@ -431,11 +463,11 @@ final class VoiceCaptureController {
             // or becomes a new note if it showed the new one.
             if capture.isOpen, capture.session == session {
                 capture.appendTranscript(text, to: note)
-                return
+                return .inPanel
             }
-            if let note, append(text, to: note) { return }
+            if let note, append(text, to: note) { return capture.isShowing(note) ? .inPanel : .elsewhere }
         case .openNote(let note):
-            if append(text, to: note) { return }
+            if append(text, to: note) { return capture.isShowing(note) ? .inPanel : .elsewhere }
         case .newNote:
             break
         }
@@ -444,6 +476,7 @@ final class VoiceCaptureController {
         container.mainContext.insert(note)
         try? container.mainContext.save()
         lastCreatedNote = note
+        return .elsewhere
     }
 
     /// Adds the text to an existing note. Returns false if the note is gone.

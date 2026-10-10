@@ -12,6 +12,8 @@ final class RecordingPillModel {
         var opensSettings: Bool
         /// The recording was kept: the notice stays until dismissed and offers Retry and Show in Finder.
         var keptRecording: Bool
+        /// A kept recording can be sent to Gemini again with Retry.
+        var canRetry = true
     }
 
     /// Gemini is transcribing the recording.
@@ -47,6 +49,13 @@ final class RecordingPill: NSPanel {
     private let model = RecordingPillModel()
     private var hideTask: Task<Void, Never>?
     private var disarmTask: Task<Void, Never>?
+    /// Set while the app itself places the pill, so that move isn't taken for the user's.
+    private var isPlacing = false
+    /// The user pressed the mouse on the pill since it was last placed, so a move may be theirs.
+    private var userTouched = false
+
+    /// Where the user last left the pill (its bottom left corner), as an array of two numbers.
+    private static let originKey = "recordingPillOrigin"
 
     /// `onStop` is the ■ button: it saves a recording, or while Gemini transcribes it keeps the
     /// on-device text. `onCancel` is ✕: it discards the recording or the transcription.
@@ -73,6 +82,14 @@ final class RecordingPill: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         animationBehavior = .utilityWindow
+        // Dragging the background moves the pill; the buttons still take their clicks.
+        isMovableByWindowBackground = true
+        // The pill lives as long as the app, so the observer is never removed.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification, object: self, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.windowMoved() }
+        }
         contentView = FirstMouseHostingView(
             rootView: RecordingPillView(
                 recorder: recorder,
@@ -82,7 +99,8 @@ final class RecordingPill: NSPanel {
                 onOpenSettings: onOpenSettings,
                 onRetry: onRetry,
                 onShowInFinder: onShowInFinder,
-                onDismiss: { [weak self] in self?.dismiss() }
+                onDismiss: { [weak self] in self?.dismiss() },
+                onResetPosition: { [weak self] in self?.resetPosition() }
             )
         )
     }
@@ -95,7 +113,7 @@ final class RecordingPill: NSPanel {
     func showRecording(below anchor: NSRect?) {
         hideTask?.cancel()
         clearContent()
-        setFrameOrigin(origin(below: anchor))
+        place(at: origin(below: anchor))
         orderFrontRegardless()
     }
 
@@ -105,19 +123,19 @@ final class RecordingPill: NSPanel {
         clearContent()
         model.transcribing = RecordingPillModel.Transcribing(preview: preview, kind: kind)
         if !isVisible {
-            setFrameOrigin(origin(below: nil))
+            place(at: origin(below: nil))
         }
         orderFrontRegardless()
     }
 
     /// Says why Gemini's answer wasn't used. A notice about a kept recording stays until dismissed;
     /// one with a button for the Settings window stays longer than a plain one.
-    func showNotice(_ message: String, opensSettings: Bool, keptRecording: Bool = false) {
+    func showNotice(_ message: String, opensSettings: Bool, keptRecording: Bool = false, canRetry: Bool = true) {
         hideTask?.cancel()
         clearContent()
-        model.notice = RecordingPillModel.Notice(message: message, opensSettings: opensSettings, keptRecording: keptRecording)
+        model.notice = RecordingPillModel.Notice(message: message, opensSettings: opensSettings, keptRecording: keptRecording, canRetry: canRetry)
         if !isVisible {
-            setFrameOrigin(origin(below: nil))
+            place(at: origin(below: nil))
         }
         orderFrontRegardless()
         guard !keptRecording else { return }
@@ -136,7 +154,7 @@ final class RecordingPill: NSPanel {
         clearContent()
         model.error = error
         if !isVisible {
-            setFrameOrigin(origin(below: nil))
+            place(at: origin(below: nil))
         }
         orderFrontRegardless()
         let seconds = error.settingsURL == nil ? 3.0 : 8.0
@@ -166,6 +184,7 @@ final class RecordingPill: NSPanel {
     func dismiss() {
         hideTask?.cancel()
         orderOut(nil)
+        userTouched = false
         clearContent()
     }
 
@@ -177,7 +196,57 @@ final class RecordingPill: NSPanel {
         model.discardArmed = false
     }
 
-    private func origin(below anchor: NSRect?) -> NSPoint {
+    /// Forgets the spot the user chose and puts the pill back where it starts.
+    private func resetPosition() {
+        UserDefaults.standard.removeObject(forKey: Self.originKey)
+        place(at: origin(below: nil, usingSaved: false))
+    }
+
+    /// Moves the pill without remembering that as the user's choice.
+    private func place(at origin: NSPoint) {
+        userTouched = false
+        isPlacing = true
+        setFrameOrigin(origin)
+        isPlacing = false
+    }
+
+    /// Notes that the user pressed the mouse on the pill; see `userTouched`.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown { userTouched = true }
+        super.sendEvent(event)
+    }
+
+    private func windowMoved() {
+        // Only a drag by the user counts, not a move the system makes (a screen change, say). The
+        // notification can arrive after the mouse is released, so the press is what is tracked.
+        guard userTouched, !isPlacing, isVisible else { return }
+        UserDefaults.standard.set([frame.origin.x, frame.origin.y], forKey: Self.originKey)
+    }
+
+    /// The origin the user left the pill at, moved onto the nearest screen if it lies outside them.
+    private func savedOrigin() -> NSPoint? {
+        guard let values = UserDefaults.standard.array(forKey: Self.originKey) as? [Double], values.count == 2 else {
+            return nil
+        }
+        let origin = NSPoint(x: values[0], y: values[1])
+        // Pulled back inside the nearest screen, so a spot on an unplugged display isn't lost.
+        let center = NSPoint(x: origin.x + Self.size.width / 2, y: origin.y + Self.size.height / 2)
+        let nearest = NSScreen.screens.min { distance(from: center, to: $0.visibleFrame) < distance(from: center, to: $1.visibleFrame) }
+        guard let visible = nearest?.visibleFrame else { return nil }
+        return NSPoint(
+            x: min(max(origin.x, visible.minX), visible.maxX - Self.size.width),
+            y: min(max(origin.y, visible.minY), visible.maxY - Self.size.height)
+        )
+    }
+
+    private func distance(from point: NSPoint, to rect: NSRect) -> CGFloat {
+        let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
+        let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
+        return hypot(dx, dy)
+    }
+
+    private func origin(below anchor: NSRect?, usingSaved: Bool = true) -> NSPoint {
+        if usingSaved, let saved = savedOrigin() { return saved }
         let size = Self.size
         let mouse = NSEvent.mouseLocation
         let screen = anchor.flatMap { anchor in NSScreen.screens.first { $0.frame.intersects(anchor) } }
@@ -211,6 +280,7 @@ private struct RecordingPillView: View {
     let onRetry: () -> Void
     let onShowInFinder: () -> Void
     let onDismiss: () -> Void
+    let onResetPosition: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulsing = false
@@ -227,6 +297,13 @@ private struct RecordingPillView: View {
         }
         .padding(12)
         .frame(width: RecordingPill.size.width, height: RecordingPill.size.height)
+        .background {
+            // Double-clicking the pill's own background (not a button) puts it back in its default spot.
+            Rectangle()
+                .fill(.clear)
+                .contentShape(.rect)
+                .onTapGesture(count: 2, perform: onResetPosition)
+        }
         .background(.regularMaterial)
         .clipShape(.rect(cornerRadius: 14))
         .scaleEffect(pulsing ? 1.04 : 1)
@@ -349,7 +426,9 @@ private struct RecordingPillView: View {
             Spacer(minLength: 0)
             HStack {
                 if notice.keptRecording {
-                    Button("Retry", action: onRetry)
+                    if notice.canRetry {
+                        Button("Retry", action: onRetry)
+                    }
                     Button("Show in Finder", action: onShowInFinder)
                 }
                 if notice.opensSettings {

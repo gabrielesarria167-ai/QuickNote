@@ -34,7 +34,8 @@ struct GeminiTranscriber: Sendable {
             audio: audio,
             mimeType: mimeType,
             prompt: GeminiRequest.prompt,
-            maxOutputTokens: GeminiLimits.maxOutputTokens(forAudioSeconds: duration, model: model)
+            maxOutputTokens: GeminiLimits.maxOutputTokens(forAudioSeconds: duration, model: model),
+            model: model
         )
         guard let body else { throw GeminiError.malformed }
         let request = GeminiRequest.urlRequest(

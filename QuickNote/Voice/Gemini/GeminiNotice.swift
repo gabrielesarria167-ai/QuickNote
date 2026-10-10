@@ -8,6 +8,8 @@ enum KeptReason: Equatable {
     case keyUnreadable
     /// The user stopped waiting for Gemini and chose to keep the recording.
     case stoppedWaiting
+    /// Gemini answered, but its transcript has far fewer words than Apple heard, so the end may be missing.
+    case incomplete
 }
 
 /// What the recording pill says when Gemini's answer wasn't used.
@@ -36,8 +38,10 @@ enum GeminiNotice {
         case .gemini(let error): "Gemini couldn't transcribe — \(outcome). \(short(error))"
         case .keyUnreadable: "Couldn't read the Gemini key from the Keychain — \(outcome)."
         case .stoppedWaiting: "Stopped waiting for Gemini — \(outcome)."
+        case .incomplete: "Gemini's transcript may be missing the end — \(outcome)."
         }
-        return savedOnDevice ? message + " On-device text saved." : message
+        // Gemini's own text was saved for `.incomplete`, so there is no on-device text to mention.
+        return savedOnDevice && reason != .incomplete ? message + " On-device text saved." : message
     }
 
     private static func short(_ error: GeminiError) -> String {

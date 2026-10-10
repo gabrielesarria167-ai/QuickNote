@@ -40,7 +40,7 @@ struct AudioFileWriterTests {
         #expect(abs(result.duration - 4) < 0.3)
 
         let file = try AVAudioFile(forReading: url)
-        #expect(file.processingFormat.sampleRate == 16_000)
+        #expect(file.processingFormat.sampleRate == 24_000)
         #expect(file.processingFormat.channelCount == 1)
         let seconds = Double(file.length) / file.processingFormat.sampleRate
         #expect(abs(seconds - 4) < 0.5)

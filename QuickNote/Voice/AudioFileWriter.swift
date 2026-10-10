@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import AVFoundation
 
-/// Writes the microphone's audio to a small AAC file (16 kHz, mono, ADTS) while recording, so it can be
+/// Writes the microphone's audio to a small AAC file (24 kHz, mono, ADTS) while recording, so it can be
 /// sent to Gemini afterwards. The audio thread hands buffers to `append`, which converts them to the
 /// file's format on the spot (the input may be 48 kHz stereo) and passes them to a serial queue to be
 /// written. A failure, such as a full disk, turns the writer off quietly: the recording goes on with
@@ -9,9 +9,13 @@ import Foundation
 ///
 /// Safe to call from any thread: the state is behind one lock, the file is only touched on the queue.
 final class AudioFileWriter: @unchecked Sendable {
-    /// Sample rate of the file, in Hz. Speech doesn't need more, and it keeps a 30 minute recording
-    /// to a few megabytes.
-    static let sampleRate = 16_000.0
+    /// Sample rate of the file, in Hz. 16 kHz blurred fast consonants. At `bitRate` a 30 minute
+    /// recording stays well under Gemini's inline limit.
+    static let sampleRate = 24_000.0
+
+    /// AAC bit rate. 30 minutes at 48 kbps is about 10.8 MB (11.1 MB with the ADTS headers), 14.8 MB as
+    /// base64; 64 kbps would come to 19.7 MB, too close to the 20 MB inline limit.
+    static let bitRate = 48_000
 
     /// Where recordings are kept while they wait for Gemini: per app (Debug and Release have
     /// different bundle ids), so one never cleans up the other's files.
@@ -67,7 +71,7 @@ final class AudioFileWriter: @unchecked Sendable {
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: Self.sampleRate,
             AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: 32_000,
+            AVEncoderBitRateKey: Self.bitRate,
         ]
         var file = try? AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
         if file == nil {

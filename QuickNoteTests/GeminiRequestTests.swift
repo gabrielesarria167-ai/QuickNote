@@ -44,10 +44,29 @@ struct GeminiRequestTests {
         let schema = try #require(config["responseSchema"] as? [String: Any])
         #expect(schema["type"] as? String == "OBJECT")
         #expect(schema["required"] as? [String] == ["title", "transcript"])
-        #expect(schema["propertyOrdering"] as? [String] == ["title", "transcript"])
+        #expect(schema["propertyOrdering"] as? [String] == ["transcript", "title"])
         let properties = try #require(schema["properties"] as? [String: [String: String]])
         #expect(properties["title"] == ["type": "STRING"])
         #expect(properties["transcript"] == ["type": "STRING"])
+    }
+
+    @Test func thinkingIsTurnedDownOnlyForModelsKnownToAcceptIt() throws {
+        #expect(GeminiRequest.thinkingConfig(forModel: "gemini-3.8-flash")?.thinkingLevel == "low")
+        #expect(GeminiRequest.thinkingConfig(forModel: " models/Gemini-3.5-flash-lite ")?.thinkingLevel == "low")
+        #expect(GeminiRequest.thinkingConfig(forModel: "gemini-2.5-flash")?.thinkingBudget == 0)
+        #expect(GeminiRequest.thinkingConfig(forModel: "gemini-2.5-flash")?.thinkingLevel == nil)
+        #expect(GeminiRequest.thinkingConfig(forModel: "gemini-2.5-pro") == nil)
+        #expect(GeminiRequest.thinkingConfig(forModel: "my-tuned-model") == nil)
+
+        let body = try GeminiRequest.body(audio: Data([1]), mimeType: "audio/aac", prompt: "x", maxOutputTokens: 100, model: "gemini-3.8-flash")
+        let config = try #require(json(body)["generationConfig"] as? [String: Any])
+        #expect(config["thinkingConfig"] as? [String: String] == ["thinkingLevel": "low"])
+    }
+
+    @Test func promptAsksForEveryWord() {
+        let prompt = GeminiRequest.prompt
+        #expect(prompt.contains("every word"))
+        #expect(prompt.contains("Never summarize"))
     }
 
     @Test func promptSaysNotToTranslateAndToTitleTheNote() {
