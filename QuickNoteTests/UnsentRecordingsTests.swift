@@ -29,7 +29,7 @@ struct UnsentRecordingsTests {
     }
 
     @Test func aFailedTranscriptionKeepsTheAudio() {
-        for error in [GeminiError.badKey, .badModel, .quota, .server, .blocked, .truncated, .malformed, .tooLarge, .offline] {
+        for error in [GeminiError.badKey, .badModel, .quota, .server, .blocked, .truncated, .malformed, .tooLarge, .offline, .mismatch] {
             #expect(UnsentRecordings.shouldKeep(after: .failure(error)))
         }
     }
@@ -119,6 +119,17 @@ struct UnsentRecordingsTests {
 
         let noNote = UnsentRecordings.Metadata(duration: 3, date: Date(timeIntervalSince1970: 1_700_000_000), noteID: nil)
         #expect(UnsentRecordings.decode(try UnsentRecordings.encode(noNote)) == noNote)
+
+        var heard = noNote
+        heard.appleText = "what Apple heard"
+        #expect(UnsentRecordings.decode(try UnsentRecordings.encode(heard)) == heard)
+    }
+
+    @Test func aSidecarWrittenBeforeAppleTextWasKeptStillDecodes() throws {
+        let old = Data(#"{"duration":3,"date":"2023-11-14T22:13:20Z"}"#.utf8)
+        let decoded = try #require(UnsentRecordings.decode(old))
+        #expect(decoded.duration == 3)
+        #expect(decoded.appleText == nil)
     }
 
     @Test func garbageIsNotASidecar() {

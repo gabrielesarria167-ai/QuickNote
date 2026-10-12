@@ -28,6 +28,8 @@ enum GeminiError: Error, Equatable, Sendable {
     case tooLarge
     /// There was no connection to Google.
     case offline
+    /// Gemini answered, but with text unrelated to what Apple's recognizer heard: likely invented.
+    case mismatch
 }
 
 /// Turns Gemini's HTTP answer into a `Transcription` or a `GeminiError`.

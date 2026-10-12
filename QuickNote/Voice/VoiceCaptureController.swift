@@ -6,9 +6,11 @@ import SwiftData
 ///
 /// With a Gemini key the recording is also kept as audio; after it stops, Gemini transcribes it and
 /// titles it while the pill says "Transcribing…". The user can discard it (✕ twice), or keep Apple's
-/// on-device text right away (■). A recording is never deleted unless it was transcribed, held no
-/// speech, or the user discarded it: if Gemini fails it moves to the Unsent Recordings folder, Apple's
-/// text is saved and the pill offers Retry. On quit the same happens at once (`saveForQuit`).
+/// on-device text right away (■). A recording is never deleted unless it held no speech or the user
+/// discarded it: if Gemini fails it moves to the Unsent Recordings folder, Apple's text is saved and
+/// the pill offers Retry; if Gemini succeeds it moves to Recently Transcribed for a week, in case the
+/// text turns out to be made up. On quit the same happens at once (`saveForQuit`). An answer
+/// unrelated to what Apple heard (Gemini sometimes invents one) counts as a failure, `.mismatch`.
 @MainActor
 @Observable
 final class VoiceCaptureController {
@@ -19,10 +21,17 @@ final class VoiceCaptureController {
         var error: VoiceRecorderError?
         var audioURL: URL
         var duration: TimeInterval
-        /// A retry of a kept recording: the file stays wherever it is, whatever happens.
+        /// A retry of a kept recording, from Unsent Recordings or Recently Transcribed. It keeps its
+        /// sidecar wherever it goes, and stays put if the user stops waiting.
         var isRetry = false
         /// Apple's recognizer gave up, so `apple` lacks the end of the recording.
         var appleIncomplete = false
+        /// What Apple heard, when that isn't `apple`: a retry saves no on-device text (the note already
+        /// has it) but still checks Gemini's answer against it.
+        var heardOverride: String?
+
+        /// What Apple's recognizer heard, to check Gemini's answer against.
+        var heard: String { heardOverride ?? apple }
 
         var kind: RecordingPillModel.Transcribing.Kind {
             isRetry ? .retry : appleIncomplete ? .appleIncomplete : .normal
@@ -35,6 +44,8 @@ final class VoiceCaptureController {
         var duration: TimeInterval
         var target: RecordTarget<Note>
         var reason: KeptReason
+        /// What Apple's recognizer heard of it, to check Gemini's answer against on Retry.
+        var heard: String
         /// The file is in the Unsent Recordings folder. If moving it there failed it is still where it
         /// was, in the temporary folder, and the next launch tries again.
         var isSafe = true
@@ -87,6 +98,9 @@ final class VoiceCaptureController {
     /// How many recordings wait in the Unsent Recordings folder.
     var unsentCount: Int { unsent.count }
 
+    /// The recordings transcribed in the last week, newest first. Updated by `refreshUnsentCount()`.
+    private(set) var recentlyTranscribed: [UnsentRecordings.Recording] = []
+
     /// True from the first ⌃⌥R until the transcript is saved, including the wait for Gemini.
     var isRecording: Bool { isStarting || recorder.state != .idle || isTranscribing }
 
@@ -107,14 +121,24 @@ final class VoiceCaptureController {
         recorder.onStopRequested = { [weak self] error in self?.finish(error: error) }
     }
 
-    /// Lists the files in Unsent Recordings (reads small sidecars; opens an audio file only when its sidecar is missing). Called when the app comes to the front.
+    /// Lists the files in Unsent Recordings and Recently Transcribed (reads small sidecars; opens an
+    /// audio file only when its sidecar is missing), after deleting transcribed ones older than a week.
+    /// Called when the app comes to the front.
     func refreshUnsentCount() {
         unsent = UnsentRecordings.list()
+        // Not the one being transcribed again right now.
+        RecentlyTranscribed.purge(sparing: pending?.audioURL)
+        recentlyTranscribed = UnsentRecordings.list(in: RecentlyTranscribed.folder).reversed()
     }
 
     /// Opens the Unsent Recordings folder in Finder.
     func showUnsentRecordings() {
         NSWorkspace.shared.open(UnsentRecordings.folder)
+    }
+
+    /// Opens the Recently Transcribed folder in Finder.
+    func showRecentlyTranscribed() {
+        NSWorkspace.shared.open(RecentlyTranscribed.folder)
     }
 
     /// ⌃⌥R. While Gemini is transcribing it only makes the pill pulse: that recording is finished and
@@ -206,7 +230,7 @@ final class VoiceCaptureController {
                     key: key
                 )
             } else if keyUnreadable {
-                let kept = keep(audioURL, duration: recording.duration, target: target, reason: .keyUnreadable)
+                let kept = keep(audioURL, duration: recording.duration, target: target, heard: recording.text, reason: .keyUnreadable)
                 conclude(gemini: nil, apple: recording.text, target: target, error: error, kept: kept)
             } else {
                 // Too short to send, or the key is gone: nothing worth keeping.
@@ -230,15 +254,20 @@ final class VoiceCaptureController {
                 var transcription = try await transcriber.transcribe(
                     audioURL: pending.audioURL, duration: pending.duration, apiKey: key, model: model
                 )
-                // Far fewer words than Apple heard: the answer probably stopped early. Ask once more
-                // and take the longer one; if the retry fails the first answer stands.
-                if TranscriptChoice.looksCutShort(gemini: transcription.transcript, apple: pending.apple),
+                // Far fewer words than Apple heard (the answer probably stopped early), or nothing like
+                // what it heard (Gemini made it up). Ask once more and take the better answer; if the
+                // retry fails the first answer stands.
+                if TranscriptChoice.looksCutShort(gemini: transcription.transcript, apple: pending.heard)
+                    || TranscriptChoice.looksUnrelated(gemini: transcription.transcript, apple: pending.heard),
                    let again = try? await transcriber.transcribe(
                        audioURL: pending.audioURL, duration: pending.duration, apiKey: key, model: model
                    ) {
-                    transcription = TranscriptChoice.longer(transcription, again)
+                    transcription = TranscriptChoice.better(transcription, again, apple: pending.heard)
                 }
-                result = .success(transcription)
+                // Still unrelated: never saved in place of Apple's text, and the recording is kept.
+                result = TranscriptChoice.looksUnrelated(gemini: transcription.transcript, apple: pending.heard)
+                    ? .failure(.mismatch)
+                    : .success(transcription)
             } catch let error as GeminiError {
                 result = .failure(error)
             } catch {
@@ -257,17 +286,38 @@ final class VoiceCaptureController {
     /// need to know.
     private func settle(_ result: Result<Transcription, GeminiError>, for pending: Pending) {
         var kept: Kept?
+        var retained: URL?
         if UnsentRecordings.shouldKeep(after: result, appleIncomplete: pending.appleIncomplete || pending.isRetry, duration: pending.duration),
            case .failure(let error) = result {
-            kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, reason: .gemini(error))
+            kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, heard: pending.heard, reason: .gemini(error))
+            if error == .mismatch, let url = kept?.url {
+                // Checked once. If the check was wrong, Retry must be able to get past it; the audio
+                // of whatever comes back is kept for a week anyway.
+                UnsentRecordings.forgetAppleText(of: url)
+                kept?.heard = ""
+            }
         } else if case .success(let transcription) = result,
                   TranscriptChoice.looksCutShort(gemini: transcription.transcript, apple: pending.apple) {
-            // Still short after the retry: the longer text is saved, and the audio stays for Retry.
-            kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, reason: .incomplete)
+            // Still short after asking twice: the longer text is saved, and the audio stays in Unsent
+            // Recordings. Not for a retry (`apple` is empty): its text is already in the note, and
+            // staying in Unsent would add it again on every resume.
+            kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, heard: pending.heard, reason: .incomplete)
+        } else if case .success = result {
+            // Kept for a week: Gemini may have made the text up, and that isn't always detectable.
+            // A retried recording brings its own sidecar.
+            // If the move fails a new recording stays in the temporary folder until the next launch.
+            let metadata = pending.isRetry ? nil : metadata(duration: pending.duration, target: pending.target, heard: pending.heard)
+            retained = RecentlyTranscribed.keep(pending.audioURL, metadata: metadata)
         } else {
             UnsentRecordings.remove(pending.audioURL)
         }
+        let created = lastCreatedNote
         conclude(gemini: result, apple: pending.apple, target: pending.target, error: pending.error, kept: kept)
+        // The text became a new note: "Transcribe Again" should add to that note, not make another.
+        if let retained, let note = lastCreatedNote, note !== created {
+            UnsentRecordings.setNoteID(note.persistentModelID, of: retained)
+            refreshUnsentCount()
+        }
     }
 
     /// Picks the text, saves it and tells the user anything they need to know. A notice about a kept
@@ -349,7 +399,7 @@ final class VoiceCaptureController {
         }
         var kept: Kept?
         if UnsentRecordings.shouldKeepWhenStoppedWaiting(appleIncomplete: pending.appleIncomplete) {
-            kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, reason: .stoppedWaiting)
+            kept = keep(pending.audioURL, duration: pending.duration, target: pending.target, heard: pending.heard, reason: .stoppedWaiting)
         } else {
             UnsentRecordings.remove(pending.audioURL)
         }
@@ -364,17 +414,25 @@ final class VoiceCaptureController {
         pending = nil
     }
 
-    /// Moves a recording to Unsent Recordings (it may already be there).
-    private func keep(_ url: URL, duration: TimeInterval, target: RecordTarget<Note>, reason: KeptReason) -> Kept {
+    /// Moves a recording to Unsent Recordings (it may already be there). One from Recently Transcribed
+    /// brings its sidecar, so it keeps its date, its note and its name.
+    private func keep(_ url: URL, duration: TimeInterval, target: RecordTarget<Note>, heard: String, reason: KeptReason) -> Kept {
         if UnsentRecordings.contains(url) {
-            return Kept(url: url, duration: duration, target: target, reason: reason)
+            return Kept(url: url, duration: duration, target: target, reason: reason, heard: heard)
         }
-        let moved = UnsentRecordings.move(url, metadata: metadata(duration: duration, target: reason == .incomplete ? .newNote : target))
-        return Kept(url: moved ?? url, duration: duration, target: target, reason: reason, isSafe: moved != nil)
+        let oldSidecar = UnsentRecordings.sidecarURL(for: url)
+        var existing = (try? Data(contentsOf: oldSidecar)).flatMap(UnsentRecordings.decode)
+        if existing != nil, heard.isEmpty { existing?.appleText = nil }
+        let moved = UnsentRecordings.move(
+            url,
+            metadata: existing ?? metadata(duration: duration, target: reason == .incomplete ? .newNote : target, heard: heard)
+        )
+        if moved != nil { try? FileManager.default.removeItem(at: oldSidecar) }
+        return Kept(url: moved ?? url, duration: duration, target: target, reason: reason, heard: heard, isSafe: moved != nil)
     }
 
     /// What the sidecar of a recording made now says.
-    private func metadata(duration: TimeInterval, target: RecordTarget<Note>, date: Date = .now) -> UnsentRecordings.Metadata {
+    private func metadata(duration: TimeInterval, target: RecordTarget<Note>, heard: String, date: Date = .now) -> UnsentRecordings.Metadata {
         // A note that was never saved has a temporary ID, which means nothing after a relaunch.
         if container.mainContext.hasChanges { try? container.mainContext.save() }
         let note: Note? = switch target {
@@ -382,7 +440,11 @@ final class VoiceCaptureController {
         case .openNote(let note): note
         case .newNote: nil
         }
-        return UnsentRecordings.Metadata(duration: duration, date: date.addingTimeInterval(-duration), noteID: note?.persistentModelID)
+        let heard = heard.trimmingCharacters(in: .whitespacesAndNewlines)
+        return UnsentRecordings.Metadata(
+            duration: duration, date: date.addingTimeInterval(-duration), noteID: note?.persistentModelID,
+            appleText: heard.isEmpty ? nil : heard
+        )
     }
 
     /// The note with this identifier, if it still exists.
@@ -409,7 +471,7 @@ final class VoiceCaptureController {
         do {
             key = try settings.readKey()
         } catch {
-            lastKept = Kept(url: kept.url, duration: kept.duration, target: kept.target, reason: .keyUnreadable, isSafe: kept.isSafe)
+            lastKept = Kept(url: kept.url, duration: kept.duration, target: kept.target, reason: .keyUnreadable, heard: kept.heard, isSafe: kept.isSafe)
             pill.showNotice(
                 GeminiNotice.keptMessage(for: .keyUnreadable, savedOnDevice: false, recordingKept: kept.isSafe),
                 opensSettings: false,
@@ -418,7 +480,7 @@ final class VoiceCaptureController {
             return false
         }
         guard let key else {
-            lastKept = Kept(url: kept.url, duration: kept.duration, target: kept.target, reason: .gemini(.badKey), isSafe: kept.isSafe)
+            lastKept = Kept(url: kept.url, duration: kept.duration, target: kept.target, reason: .gemini(.badKey), heard: kept.heard, isSafe: kept.isSafe)
             pill.showNotice(
                 GeminiNotice.keptMessage(for: .gemini(.badKey), savedOnDevice: false, recordingKept: kept.isSafe),
                 opensSettings: true,
@@ -428,7 +490,10 @@ final class VoiceCaptureController {
         }
         lastKept = kept
         beginTranscription(
-            Pending(apple: "", target: kept.target, error: nil, audioURL: kept.url, duration: kept.duration, isRetry: true),
+            Pending(
+                apple: "", target: kept.target, error: nil, audioURL: kept.url, duration: kept.duration,
+                isRetry: true, heardOverride: kept.heard
+            ),
             key: key
         )
         return true
@@ -463,9 +528,22 @@ final class VoiceCaptureController {
         }
     }
 
+    /// Sends a recording from Recently Transcribed to Gemini again, for a transcript that came out
+    /// wrong. The new text goes below the old one in the same note (or into a new note), and isn't
+    /// checked against Apple's text: the user has already judged the last answer.
+    func transcribeAgain(_ recording: UnsentRecordings.Recording) {
+        guard FileManager.default.fileExists(atPath: recording.url.path) else {
+            refreshUnsentCount()
+            return
+        }
+        var kept = kept(for: recording)
+        kept.heard = ""
+        _ = retry(kept)
+    }
+
     private func kept(for recording: UnsentRecordings.Recording) -> Kept {
         let target: RecordTarget<Note> = recording.noteID.flatMap { note(with: $0) }.map { .openNote($0) } ?? .newNote
-        return Kept(url: recording.url, duration: recording.duration, target: target, reason: .stoppedWaiting)
+        return Kept(url: recording.url, duration: recording.duration, target: target, reason: .stoppedWaiting, heard: recording.appleText ?? "")
     }
 
     private func showKeptRecordingInFinder() {
@@ -480,14 +558,14 @@ final class VoiceCaptureController {
         if let pending {
             endTranscription()
             if !pending.isRetry {
-                _ = UnsentRecordings.move(pending.audioURL, metadata: metadata(duration: pending.duration, target: pending.target))
+                _ = UnsentRecordings.move(pending.audioURL, metadata: metadata(duration: pending.duration, target: pending.target, heard: pending.heard))
                 save(VoiceNoteText.compose(title: nil, transcript: pending.apple), to: pending.target)
             }
         } else if recorder.state == .recording || recorder.state == .finishing {
             let recording = recorder.stopNow()
             if let url = recording.audioURL {
                 if recording.duration >= TranscriptChoice.minimumAudioDuration {
-                    _ = UnsentRecordings.move(url, metadata: metadata(duration: recording.duration, target: target))
+                    _ = UnsentRecordings.move(url, metadata: metadata(duration: recording.duration, target: target, heard: recording.text))
                 } else {
                     try? FileManager.default.removeItem(at: url)
                 }

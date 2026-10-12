@@ -24,6 +24,7 @@ enum GeminiNotice {
         case .badKey: "Gemini didn't accept the API key"
         case .badModel: "Gemini doesn't know this model"
         case .offline: "No connection"
+        case .mismatch: "Gemini's text didn't match what was said"
         case .quota: "Gemini quota reached"
         case .server, .blocked, .truncated, .malformed, .empty, .tooLarge: "Gemini couldn't transcribe this"
         }
@@ -56,6 +57,7 @@ enum GeminiNotice {
         case .malformed: "The answer wasn't usable."
         case .tooLarge: "The recording is too big to send."
         case .empty: "No speech was found."
+        case .mismatch: "Its text didn't match what was said."
         }
     }
 

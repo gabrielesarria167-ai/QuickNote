@@ -29,7 +29,7 @@ struct GeminiNoticeTests {
     @Test func onlyARejectedKeyOrModelOffersSettings() {
         #expect(GeminiNotice.offersSettings(for: .badKey))
         #expect(GeminiNotice.offersSettings(for: .badModel))
-        for error in [GeminiError.quota, .server, .blocked, .truncated, .malformed, .empty, .tooLarge, .offline] {
+        for error in [GeminiError.quota, .server, .blocked, .truncated, .malformed, .empty, .tooLarge, .offline, .mismatch] {
             #expect(!GeminiNotice.offersSettings(for: error))
         }
     }
@@ -42,7 +42,7 @@ struct GeminiNoticeTests {
     }
 
     @Test func aKeptRecordingMessageSaysSoEvenWithoutAnyText() {
-        for error in [GeminiError.badKey, .badModel, .quota, .server, .blocked, .truncated, .malformed, .tooLarge, .offline] {
+        for error in [GeminiError.badKey, .badModel, .quota, .server, .blocked, .truncated, .malformed, .tooLarge, .offline, .mismatch] {
             let message = GeminiNotice.keptMessage(for: .gemini(error), savedOnDevice: false)
             #expect(message.contains("recording kept"))
             #expect(!message.contains("On-device text saved"))

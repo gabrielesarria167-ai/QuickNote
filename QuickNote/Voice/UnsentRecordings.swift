@@ -67,6 +67,9 @@ enum UnsentRecordings {
         var date: Date
         /// The note it belonged to, if any; it survives a relaunch.
         var noteID: PersistentIdentifier?
+        /// What Apple's recognizer heard, so a retry can tell an invented answer from Gemini. Nil in
+        /// sidecars written before it was kept.
+        var appleText: String? = nil
     }
 
     /// A recording in the folder. `noteID` is nil for a new note or when nothing is known.
@@ -75,6 +78,8 @@ enum UnsentRecordings {
         var date: Date
         var duration: TimeInterval
         var noteID: PersistentIdentifier?
+        /// What Apple's recognizer heard, if known.
+        var appleText: String? = nil
     }
 
     private static let audioExtensions: Set<String> = ["flac", "aac"]
@@ -107,6 +112,24 @@ enum UnsentRecordings {
     static func writeSidecar(_ metadata: Metadata, for recording: URL) {
         guard let data = try? encode(metadata) else { return }
         try? data.write(to: sidecarURL(for: recording), options: .atomic)
+    }
+
+    /// Drops what Apple heard from a recording's sidecar, so the next answer for it isn't checked
+    /// against that text again: after one answer was turned down, a check that may be wrong (Apple
+    /// listening in another language) must not turn down every retry too.
+    static func forgetAppleText(of recording: URL) {
+        let sidecar = sidecarURL(for: recording)
+        guard let data = try? Data(contentsOf: sidecar), var metadata = decode(data), metadata.appleText != nil else { return }
+        metadata.appleText = nil
+        writeSidecar(metadata, for: recording)
+    }
+
+    /// Records in a recording's sidecar which note its text went to.
+    static func setNoteID(_ noteID: PersistentIdentifier, of recording: URL) {
+        let sidecar = sidecarURL(for: recording)
+        guard let data = try? Data(contentsOf: sidecar), var metadata = decode(data) else { return }
+        metadata.noteID = noteID
+        writeSidecar(metadata, for: recording)
     }
 
     /// Deletes a recording and its sidecar.
@@ -159,7 +182,10 @@ enum UnsentRecordings {
         }
         return items.filter(isRecording).map { url in
             if let data = try? Data(contentsOf: sidecarURL(for: url)), let metadata = decode(data) {
-                return Recording(url: url, date: metadata.date, duration: metadata.duration, noteID: metadata.noteID)
+                return Recording(
+                    url: url, date: metadata.date, duration: metadata.duration, noteID: metadata.noteID,
+                    appleText: metadata.appleText
+                )
             }
             let date = (try? url.resourceValues(forKeys: Set(keys)))?.contentModificationDate ?? .now
             let duration = audioDuration(of: url)

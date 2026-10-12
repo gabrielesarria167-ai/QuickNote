@@ -72,6 +72,19 @@ private struct MenuBarContent: View {
             }
             .disabled(voice.isRecording)
         }
+        if !voice.recentlyTranscribed.isEmpty {
+            Menu("Recently Transcribed") {
+                ForEach(voice.recentlyTranscribed, id: \.url) { recording in
+                    Button(UnsentRecordings.menuLabel(date: recording.date, duration: recording.duration)) {
+                        voice.transcribeAgain(recording)
+                    }
+                }
+                Divider()
+                Text("Click one to transcribe it again. Kept for 7 days.")
+                Button("Show in Finder") { voice.showRecentlyTranscribed() }
+            }
+            .disabled(voice.isRecording)
+        }
         Button("Settings…", action: showSettings)
             .keyboardShortcut(",")
         Divider()
