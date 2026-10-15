@@ -56,8 +56,15 @@ in the main window until you allow it. The shortcut turns on by itself once you 
 macOS remembers that permission by the app's signature. An ad-hoc signature is a hash of one exact build, so
 every rebuild looked like a new app. Release builds are therefore signed with the self-signed
 **QuickNote Signing** certificate every time (same trick as MacSafe), and an update keeps the permission.
-Back up `~/Library/QuickNote Signing`: on another Mac import `identity.p12` (password `quicknote`) into the
-login keychain instead of making a new certificate. A different certificate means allowing it once more.
+`scripts/make_signing_identity.sh` asks for a password and keeps one encrypted backup,
+`~/Library/QuickNote Signing/identity.p12`. Store it and its password somewhere safe (a password manager):
+anyone with both can sign an app that Macs which allowed QuickNote would trust too. On another Mac,
+double-click `identity.p12` to import it into the login keychain instead of making a new certificate.
+A different certificate means allowing it once more.
+Made the certificate with an older version of the script? That folder holds an unencrypted `key.pem`, a
+`cert.pem` and an `identity.p12` whose password was `quicknote`. Export a new backup from Keychain Access
+(*My Certificates* → *QuickNote Signing* → *File › Export Items…*, as `.p12`, with a real password),
+then delete the three old files and keep only the new export.
 Without the certificate `build.sh` falls back to ad-hoc signing and says so.
 
 ### Debug builds (Xcode ⌘R)
@@ -80,7 +87,7 @@ Notes live in `~/Library/Application Support/<bundle id>/Notes.store`.
 4. Push `main`. The site is served by GitHub Pages from `docs/` on `main`: `index.html` (download page) and
    `install.sh` (the installer).
 
-The app icon is drawn in `scripts/icon.svg`; `swift scripts/make_icon.swift` renders it into the asset catalog.
+The app icon is drawn in `docs/icon.svg` (the download page uses it too); `swift scripts/make_icon.swift` renders it into the asset catalog.
 
 ## How it works
 | Piece | File |
@@ -94,8 +101,8 @@ The app icon is drawn in `scripts/icon.svg`; `swift scripts/make_icon.swift` ren
 
 - Keys are only *observed*, never swallowed: every key still reaches the app you're typing in.
 - ⌃⌥ counts as a **tap**: the panel opens when you release them, only if no other key (or ⇧/⌘) was pressed
-  while they were held and the whole tap took ≤ 0.8 s. Shortcuts that start with ⌃⌥ (⌃⌥→ in window managers,
-  VoiceOver commands) keep working and never open the panel.
+  and nothing was clicked while they were held, and the whole tap took ≤ 0.8 s. Shortcuts that start with ⌃⌥
+  (⌃⌥→ in window managers, ⌃⌥-click, VoiceOver commands) keep working and never open the panel.
 - Tapping ⌃⌥ again while the panel is open saves and closes it.
 - To change the keys or timing, edit `chord` / `maxDuration` in `ModifierChordDetector`.
 

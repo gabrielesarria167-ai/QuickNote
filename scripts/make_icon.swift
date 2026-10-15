@@ -1,9 +1,9 @@
-// Renders scripts/icon.svg into the app's icon set (QuickNote/Assets.xcassets/AppIcon.appiconset).
+// Renders docs/icon.svg (also the download page's icon) into the app's icon set (QuickNote/Assets.xcassets/AppIcon.appiconset).
 //   swift scripts/make_icon.swift
 import AppKit
 
 let root = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().deletingLastPathComponent()
-let svg = root.appending(path: "scripts/icon.svg")
+let svg = root.appending(path: "docs/icon.svg")
 let iconSet = root.appending(path: "QuickNote/Assets.xcassets/AppIcon.appiconset")
 
 guard let image = NSImage(contentsOf: svg) else {

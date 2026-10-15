@@ -40,7 +40,9 @@ struct NotesListView: View {
         } detail: {
             Group {
                 if let selectedNote {
+                    // A fresh editor per note, so switching notes isn't seen as an edit.
                     NoteEditorView(note: selectedNote)
+                        .id(selectedNote.id)
                 } else {
                     ContentUnavailableView(
                         "No Note Selected",
@@ -59,6 +61,7 @@ struct NotesListView: View {
         .onChange(of: selection) { oldValue, _ in
             discardIfBlank(oldValue)
         }
+        .onDisappear { discardIfBlank(selection) }
     }
 
     private func newNote() {
@@ -75,7 +78,7 @@ struct NotesListView: View {
         context.delete(note)
     }
 
-    /// Notes created with ⌘N and left empty are removed when you move away.
+    /// Notes created with ⌘N and left empty are removed when you move away or close the window.
     private func discardIfBlank(_ id: PersistentIdentifier?) {
         guard let note = notes.first(where: { $0.id == id }), note.isBlank else { return }
         context.delete(note)

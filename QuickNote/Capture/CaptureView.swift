@@ -27,6 +27,7 @@ struct CaptureView: View {
                 .font(.system(size: 16))
                 .scrollContentBackground(.hidden)
                 .focused($isFocused)
+                .accessibilityLabel("Note text")
                 .overlay(alignment: .topLeading) {
                     if draft.text.isEmpty {
                         Text("What's the idea?")
@@ -34,6 +35,7 @@ struct CaptureView: View {
                             .foregroundStyle(.tertiary)
                             .padding(.leading, 5)
                             .allowsHitTesting(false)
+                            .accessibilityHidden(true)
                     }
                 }
 

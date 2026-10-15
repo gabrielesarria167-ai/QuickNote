@@ -7,7 +7,7 @@ import SwiftUI
 @MainActor
 final class CapturePanelController: NSObject, NSWindowDelegate {
     private let container: ModelContainer
-    private let draft = CaptureDraft()
+    let draft = CaptureDraft()
     private let panelSize = NSSize(width: 540, height: 220)
 
     /// Text of the new note, kept aside while browsing older notes.
@@ -16,6 +16,9 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
     private var olderNotes: [Note] = []
     /// 0 is the new note; `n` is `olderNotes[n - 1]`.
     private var position = 0
+    /// Older notes whose text was changed here. Only these are deleted if left blank, so a blank
+    /// note made elsewhere (⌘N in the main window) isn't.
+    private var editedNotes: Set<ObjectIdentifier> = []
 
     private lazy var panel: CapturePanel = {
         let panel = CapturePanel(contentRect: NSRect(origin: .zero, size: panelSize))
@@ -43,6 +46,7 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         olderNotes = (try? container.mainContext.fetch(newestFirst)) ?? []
         newNoteText = ""
         position = 0
+        editedNotes = []
         draft.begin()
         updateCaption()
         panel.setFrameOrigin(originOnActiveScreen())
@@ -57,6 +61,11 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         position = (position + 1) % (olderNotes.count + 1)
         draft.text = position == 0 ? newNoteText : olderNotes[position - 1].text
         updateCaption()
+        // Otherwise VoiceOver doesn't say that the text in front of you is now another note.
+        NSAccessibility.post(element: panel, notification: .announcementRequested, userInfo: [
+            .announcement: draft.caption,
+            .priority: NSAccessibilityPriorityLevel.high.rawValue,
+        ])
     }
 
     /// Saves the new note (unless blank) and any edits to older notes, then
@@ -66,17 +75,28 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         stashEditorText()
         let context = container.mainContext
         let text = newNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty {
-            context.insert(Note(text: text))
+        let newNote = text.isEmpty ? nil : Note(text: text)
+        if let newNote {
+            context.insert(newNote)
         }
-        for note in olderNotes where note.isBlank {
+        for note in olderNotes where note.isBlank && editedNotes.contains(ObjectIdentifier(note)) {
             context.delete(note)
         }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Stay open with the text still there, so nothing is lost; esc tries again.
+            if let newNote {
+                context.delete(newNote)  // inserted again on the next try
+            }
+            draft.caption = "Couldn't save: \(error.localizedDescription)"
+            return
+        }
 
         newNoteText = ""
         olderNotes = []
         position = 0
+        editedNotes = []
         draft.text = ""
         if panel.isVisible {
             panel.orderOut(nil)
@@ -93,6 +113,7 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         if note.text != draft.text {
             note.text = draft.text
             note.updatedAt = .now
+            editedNotes.insert(ObjectIdentifier(note))
         }
     }
 

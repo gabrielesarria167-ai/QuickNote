@@ -18,6 +18,7 @@ final class CapturePanel: NSPanel {
         isFloatingPanel = true
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        title = "QuickNote"  // hidden, but VoiceOver names the window by it
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         isMovableByWindowBackground = true
@@ -38,8 +39,11 @@ final class CapturePanel: NSPanel {
         switch event.type {
         case .keyDown:
             rightShiftTap.keyPressed()
-            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            let isEscape = event.keyCode == 53
+            // Only the four real modifiers: Caps Lock and the keypad/fn flags don't count.
+            let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            // While a Japanese, Chinese or Korean word is being composed, Esc cancels it: leave that to the text view.
+            let isComposing = (firstResponder as? NSTextInputClient)?.hasMarkedText() == true
+            let isEscape = event.keyCode == 53 && !isComposing
             let isCommandReturn = (event.keyCode == 36 || event.keyCode == 76) && modifiers == .command
             if isEscape || isCommandReturn {
                 onSubmit?()
