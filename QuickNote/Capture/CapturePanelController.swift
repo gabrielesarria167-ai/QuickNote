@@ -7,7 +7,7 @@ import SwiftUI
 @MainActor
 final class CapturePanelController: NSObject, NSWindowDelegate {
     private let container: ModelContainer
-    private let draft = CaptureDraft()
+    let draft = CaptureDraft()
     private let panelSize = NSSize(width: 540, height: 220)
 
     /// Text of the new note, kept aside while browsing older notes.
@@ -61,6 +61,11 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         position = (position + 1) % (olderNotes.count + 1)
         draft.text = position == 0 ? newNoteText : olderNotes[position - 1].text
         updateCaption()
+        // Otherwise VoiceOver doesn't say that the text in front of you is now another note.
+        NSAccessibility.post(element: panel, notification: .announcementRequested, userInfo: [
+            .announcement: draft.caption,
+            .priority: NSAccessibilityPriorityLevel.high.rawValue,
+        ])
     }
 
     /// Saves the new note (unless blank) and any edits to older notes, then
@@ -70,13 +75,23 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         stashEditorText()
         let context = container.mainContext
         let text = newNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty {
-            context.insert(Note(text: text))
+        let newNote = text.isEmpty ? nil : Note(text: text)
+        if let newNote {
+            context.insert(newNote)
         }
         for note in olderNotes where note.isBlank && editedNotes.contains(ObjectIdentifier(note)) {
             context.delete(note)
         }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Stay open with the text still there, so nothing is lost; esc tries again.
+            if let newNote {
+                context.delete(newNote)  // inserted again on the next try
+            }
+            draft.caption = "Couldn't save: \(error.localizedDescription)"
+            return
+        }
 
         newNoteText = ""
         olderNotes = []

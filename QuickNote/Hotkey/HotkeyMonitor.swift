@@ -20,7 +20,7 @@ final class HotkeyMonitor {
         if let globalMonitor {
             NSEvent.removeMonitor(globalMonitor)
         }
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: Self.events) { [weak self] event in
             MainActor.assumeIsolated { self?.handle(event) }
         }
     }
@@ -29,15 +29,18 @@ final class HotkeyMonitor {
     /// same chord saves and closes it.
     func startLocal() {
         guard localMonitor == nil else { return }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: Self.events) { [weak self] event in
             MainActor.assumeIsolated { self?.handle(event) }
             return event
         }
     }
 
+    /// Clicks count like key presses: ⌃⌥-click and ⌃⌥-drag are shortcuts too.
+    private static let events: NSEvent.EventTypeMask = [.keyDown, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+
     private func handle(_ event: NSEvent) {
         switch event.type {
-        case .keyDown:
+        case .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown:
             detector.keyPressed()
         case .flagsChanged:
             if detector.modifiersChanged(to: ModifierKeys(event.modifierFlags), at: event.timestamp) {
