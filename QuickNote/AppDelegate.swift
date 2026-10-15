@@ -43,6 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // Quitting (log out, restart, an update) with the panel open would otherwise drop what's typed in it.
+    func applicationWillTerminate(_ notification: Notification) {
+        capture.commit()
+    }
+
     // Keep running with no windows open so the shortcut keeps working.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false

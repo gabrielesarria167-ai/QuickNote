@@ -38,7 +38,8 @@ final class CapturePanel: NSPanel {
         switch event.type {
         case .keyDown:
             rightShiftTap.keyPressed()
-            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            // Only the four real modifiers: Caps Lock and the keypad/fn flags don't count.
+            let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
             let isEscape = event.keyCode == 53
             let isCommandReturn = (event.keyCode == 36 || event.keyCode == 76) && modifiers == .command
             if isEscape || isCommandReturn {

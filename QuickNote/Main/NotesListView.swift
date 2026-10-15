@@ -40,7 +40,9 @@ struct NotesListView: View {
         } detail: {
             Group {
                 if let selectedNote {
+                    // A fresh editor per note, so switching notes isn't seen as an edit.
                     NoteEditorView(note: selectedNote)
+                        .id(selectedNote.id)
                 } else {
                     ContentUnavailableView(
                         "No Note Selected",
