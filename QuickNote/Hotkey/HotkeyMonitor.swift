@@ -14,9 +14,12 @@ final class HotkeyMonitor {
     }
 
     /// Keys pressed in other apps. Requires the Accessibility permission, so call this only once it
-    /// has been granted.
+    /// has been granted. Calling it again replaces the monitor: one added before the permission was
+    /// turned off may not hear anything once it's back on.
     func startGlobal() {
-        guard globalMonitor == nil else { return }
+        if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+        }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             MainActor.assumeIsolated { self?.handle(event) }
         }
