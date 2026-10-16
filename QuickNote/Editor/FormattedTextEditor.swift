@@ -7,11 +7,13 @@ struct FormattedTextEditor: View {
     var fontSize: CGFloat
     /// Changing this moves keyboard focus into the editor. `nil` leaves focus alone.
     var focusToken: Int? = nil
+    /// Offered every paste and drop; returns true if it attached what's on the pasteboard.
+    var onAttach: ((NSPasteboard) -> Bool)? = nil
 
     @State private var controller = MarkdownEditorController()
 
     var body: some View {
-        MarkdownEditorRepresentable(text: $text, fontSize: fontSize, focusToken: focusToken, controller: controller)
+        MarkdownEditorRepresentable(text: $text, fontSize: fontSize, focusToken: focusToken, onAttach: onAttach, controller: controller)
             .overlay(alignment: .topLeading) {
                 GeometryReader { geometry in
                     if let selection = controller.selection {
@@ -129,6 +131,7 @@ private struct MarkdownEditorRepresentable: NSViewRepresentable {
     @Binding var text: String
     let fontSize: CGFloat
     let focusToken: Int?
+    let onAttach: ((NSPasteboard) -> Bool)?
     let controller: MarkdownEditorController
 
     func makeCoordinator() -> Coordinator {
@@ -138,6 +141,7 @@ private struct MarkdownEditorRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let (scrollView, textView) = MarkdownTextView.makeScrollable(fontSize: fontSize)
         textView.delegate = context.coordinator
+        textView.onAttach = onAttach
         textView.string = text
         textView.restyle()
         context.coordinator.textView = textView
@@ -149,6 +153,7 @@ private struct MarkdownEditorRepresentable: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.parent = self
         guard let textView = coordinator.textView else { return }
+        textView.onAttach = onAttach
         if textView.string != text {
             // Changed from outside, e.g. flipping to an older note in the capture panel.
             textView.string = text

@@ -63,6 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !Self.isRunningTests else { return }
         VoiceRecorder.cleanUpLeftoverRecordings()
+        // Only when the notes could be read, so a failed fetch can't look like "no attachments in use".
+        if let notes = try? container.mainContext.fetch(FetchDescriptor<Note>()) {
+            Attachments.removeOrphans(keeping: notes.flatMap(\.attachments))
+        }
         voice.refreshUnsentCount()
         NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main

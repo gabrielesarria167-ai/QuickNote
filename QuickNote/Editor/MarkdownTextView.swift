@@ -268,6 +268,32 @@ final class MarkdownTextView: NSTextView {
         return true
     }
 
+    // MARK: Attachments
+
+    /// Offered every paste and drop first; returns true if it attached what's on the pasteboard.
+    /// Otherwise the text view handles it as usual (a plain text view would insert a file's path).
+    var onAttach: ((NSPasteboard) -> Bool)?
+
+    private static let attachmentTypes: [NSPasteboard.PasteboardType] = [.fileURL, .png, .tiff]
+
+    override func paste(_ sender: Any?) {
+        if onAttach?(.general) == true { return }
+        super.paste(sender)
+    }
+
+    override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+        super.acceptableDragTypes + Self.attachmentTypes
+    }
+
+    override func dragOperation(for dragInfo: any NSDraggingInfo, type: NSPasteboard.PasteboardType) -> NSDragOperation {
+        onAttach != nil && Self.attachmentTypes.contains(type) ? .copy : super.dragOperation(for: dragInfo, type: type)
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if onAttach?(sender.draggingPasteboard) == true { return true }
+        return super.performDragOperation(sender)
+    }
+
     /// A click on a drawn to-do box ticks it, without moving the caret.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)

@@ -6,16 +6,19 @@ final class Note {
     var text: String
     var createdAt: Date
     var updatedAt: Date
+    /// Attached files, as names relative to `Attachments.folder` (`<UUID>/<file name>`).
+    var attachments: [String] = []
 
-    init(text: String = "", createdAt: Date = .now) {
+    init(text: String = "", attachments: [String] = [], createdAt: Date = .now) {
         self.text = text
+        self.attachments = attachments
         self.createdAt = createdAt
         self.updatedAt = createdAt
     }
 
-    /// First non-empty line, used as the note's title in lists.
+    /// First non-empty line, used as the note's title in lists; an attachment-only note uses its first file's name.
     var title: String {
-        lines.first ?? "New Note"
+        lines.first ?? attachments.first.map(Attachments.displayName) ?? "New Note"
     }
 
     /// Second non-empty line, shown under the title in the sidebar.
@@ -24,7 +27,7 @@ final class Note {
     }
 
     var isBlank: Bool {
-        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty
     }
 
     /// Non-empty lines with their Markdown marks removed.

@@ -99,7 +99,8 @@ struct MarkdownTextViewTests {
         let draft = CaptureDraft()
         draft.begin()
         draft.text = sample
-        let host = NSHostingView(rootView: CaptureView(draft: draft).frame(width: 620, height: 320))
+        draft.attachments = ["ABC/Pasted Image 2026-10-16 09.05.07.png", "DEF/spec.pdf"]
+        let host = NSHostingView(rootView: CaptureView(draft: draft, onPickFiles: {}).frame(width: 620, height: 320))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 320), styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = host
         window.layoutIfNeeded()
