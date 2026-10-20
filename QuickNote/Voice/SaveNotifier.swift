@@ -9,6 +9,9 @@ import UserNotifications
 final class SaveNotifier: NSObject, UNUserNotificationCenterDelegate, Sendable {
     static let shared = SaveNotifier()
 
+    /// Brings up the notes window when a banner is clicked; set by the app delegate.
+    @MainActor static var showMainWindow: (() -> Void)?
+
     /// How much of the text the banner shows when there is no title.
     static let previewLength = 80
 
@@ -59,9 +62,7 @@ final class SaveNotifier: NSObject, UNUserNotificationCenterDelegate, Sendable {
         didReceive response: UNNotificationResponse
     ) async {
         await MainActor.run {
-            NSApp.activate()
-            // The notes window, if it was closed rather than quit, comes back; the panels don't count.
-            NSApp.windows.first { $0.title == "QuickNote" }?.makeKeyAndOrderFront(nil)
+            Self.showMainWindow?()
         }
     }
 }

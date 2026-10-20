@@ -19,14 +19,14 @@ struct KeyChordDetectorTests {
 
     @Test mutating func bothTogetherIsTheChord() {
         #expect(down(".", at: 1.00) == .hold)
-        #expect(down("-", at: 1.03) == .chord)
+        #expect(down("-", at: 1.03) == .chord([".", "-"]))
         #expect(up(".") == .swallow)
         #expect(up("-") == .swallow)
     }
 
     @Test mutating func eitherOrderWorks() {
         #expect(down("-", at: 1.00) == .hold)
-        #expect(down(".", at: 1.02) == .chord)
+        #expect(down(".", at: 1.02) == .chord([".", "-"]))
     }
 
     @Test mutating func aLoneDotIsTypedAfterTheWindow() {
@@ -55,7 +55,7 @@ struct KeyChordDetectorTests {
 
     @Test mutating func repeatsWhileHoldingTheChordAreSwallowed() {
         #expect(down(".", at: 1.00) == .hold)
-        #expect(down("-", at: 1.02) == .chord)
+        #expect(down("-", at: 1.02) == .chord([".", "-"]))
         #expect(down(".", at: 1.50, isRepeat: true) == .swallow)
         #expect(down("-", at: 1.55, isRepeat: true) == .swallow)
     }
@@ -72,10 +72,22 @@ struct KeyChordDetectorTests {
 
     @Test mutating func worksAgainAfterAChord() {
         #expect(down(".", at: 1.00) == .hold)
-        #expect(down("-", at: 1.02) == .chord)
+        #expect(down("-", at: 1.02) == .chord([".", "-"]))
         #expect(up(".") == .swallow)
         #expect(up("-") == .swallow)
         #expect(down("-", at: 2.00) == .hold)
-        #expect(down(".", at: 2.01) == .chord)
+        #expect(down(".", at: 2.01) == .chord([".", "-"]))
+    }
+
+    @Test mutating func eachPairIsItsOwnChord() {
+        detector.chords = [[".", "-"], ["<", "z"]]
+        #expect(down("z", at: 1.00) == .hold)
+        #expect(down("<", at: 1.02) == .chord(["<", "z"]))
+        #expect(up("z") == .swallow)
+        #expect(up("<") == .swallow)
+        // Keys from different pairs are just typed.
+        #expect(down(".", at: 2.00) == .hold)
+        #expect(down("z", at: 2.01) == .flushThenHold)
+        #expect(timeOut())
     }
 }

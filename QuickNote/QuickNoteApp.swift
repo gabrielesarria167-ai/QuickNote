@@ -23,27 +23,28 @@ struct QuickNoteApp: App {
         }
 
         MenuBarExtra {
-            MenuBarContent(capture: appDelegate.capture, voice: appDelegate.voice) { appDelegate.showSettings() }
+            MenuBarContent(appDelegate: appDelegate)
         } label: {
-            MenuBarIcon(voice: appDelegate.voice)
+            MenuBarIcon(appDelegate: appDelegate)
         }
     }
 }
 
 /// The lightbulb, or a microphone while a voice note is being recorded.
 private struct MenuBarIcon: View {
-    let voice: VoiceCaptureController
+    let appDelegate: AppDelegate
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Label("QuickNote", systemImage: voice.isRecording ? "mic.fill" : "lightbulb")
+        Label("QuickNote", systemImage: appDelegate.voice.isRecording ? "mic.fill" : "lightbulb")
+            .onAppear { appDelegate.openMainWindow = { openWindow(id: "main") } }
     }
 }
 
 private struct MenuBarContent: View {
-    let capture: CapturePanelController
-    let voice: VoiceCaptureController
-    let showSettings: () -> Void
-    @Environment(\.openWindow) private var openWindow
+    let appDelegate: AppDelegate
+    private var capture: CapturePanelController { appDelegate.capture }
+    private var voice: VoiceCaptureController { appDelegate.voice }
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     private var menuTitle: String {
@@ -55,10 +56,7 @@ private struct MenuBarContent: View {
         Button("New Quick Note") { capture.show() }
         Button(menuTitle) { voice.toggle() }
             .disabled(voice.isTranscribing)
-        Button("Open QuickNote") {
-            openWindow(id: "main")
-            NSApp.activate()
-        }
+        Button("Open QuickNote") { appDelegate.showMainWindow() }
         if voice.unsentCount > 0 {
             Menu("Unsent Recordings") {
                 ForEach(voice.unsent, id: \.url) { recording in
@@ -85,7 +83,7 @@ private struct MenuBarContent: View {
             }
             .disabled(voice.isRecording)
         }
-        Button("Settings…", action: showSettings)
+        Button("Settings…") { appDelegate.showSettings() }
             .keyboardShortcut(",")
         Divider()
         Toggle("Launch at Login", isOn: $launchAtLogin)

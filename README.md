@@ -11,8 +11,10 @@ them in place. After the oldest note it wraps around to the new one, and whateve
 ⌃⌥ → New note → .- → Note 3 → .- → Note 2 → .- → Note 1 → .- → New note …
 ```
 
-Neither character is typed when you press them together. Typed on their own, `.` and `-` work as usual: each is held
-back for 70 ms to see whether the other key joins it, too short to notice.
+Press **`<` and `z` together** to go the other way, towards newer notes (from the new note it wraps to the oldest).
+
+Neither character is typed when you press them together. Typed on their own, `.`, `-`, `<` and `z` work as usual: each
+is held back for 70 ms to see whether the other key of its pair joins it, too short to notice.
 
 ### Voice notes
 Press **⌃⌥R** from any app to dictate a note; a small pill near the top of the screen (just under the capture

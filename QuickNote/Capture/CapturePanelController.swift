@@ -3,7 +3,7 @@ import SwiftData
 import SwiftUI
 
 /// Shows the capture panel, lets you flip back through older notes by pressing
-/// `.` and `-` together, and saves everything when it closes.
+/// `.` and `-` together (and forward again with `<` and `z`), and saves everything when it closes.
 @MainActor
 final class CapturePanelController: NSObject, NSWindowDelegate {
     private let container: ModelContainer
@@ -16,8 +16,6 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
     private var newNoteAttachments: [String] = []
     /// While the file picker is up the panel isn't key, which must not save and close it.
     private var isPickingFiles = false
-    /// Whether the app was activated only to show the file picker, so closing gives focus back.
-    private var activatedForPicker = false
     /// Existing notes, newest first, loaded each time the panel opens.
     private var olderNotes: [Note] = []
     /// 0 is the new note; `n` is `olderNotes[n - 1]`.
@@ -33,7 +31,7 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(rootView: CaptureView(draft: draft) { [weak self] in self?.pickFiles() })
         panel.delegate = self
         panel.onSubmit = { [weak self] in self?.commit() }
-        panel.onFlip = { [weak self] in self?.showNextOlderNote() }
+        panel.onFlip = { [weak self] in self?.flip(by: $0) }
         return panel
     }()
 
@@ -58,7 +56,7 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         draft.begin()
         updateCaption()
         panel.setFrameOrigin(originOnActiveScreen())
-        panel.makeKeyAndOrderFront(nil)
+        focusPanel()
     }
 
     /// The note the panel is showing, or nil for the new note (or when it's closed).
@@ -91,12 +89,13 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Steps back to the next older note, wrapping around to the new note
-    /// after the oldest one.
-    func showNextOlderNote() {
+    /// Steps to an older note (`step` 1) or a newer one (-1). Past the oldest note it wraps around to
+    /// the new note, and back from the new note to the oldest.
+    func flip(by step: Int) {
         guard !olderNotes.isEmpty else { return }
         stashEditorText()
-        position = (position + 1) % (olderNotes.count + 1)
+        let count = olderNotes.count + 1
+        position = (position + step + count) % count
         draft.text = position == 0 ? newNoteText : olderNotes[position - 1].text
         draft.attachments = position == 0 ? newNoteAttachments : olderNotes[position - 1].attachments
         updateCaption()
@@ -109,7 +108,9 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         // Toggling the hotkey while choosing files closes the picker without attaching anything.
         if isPickingFiles {
             isPickingFiles = false
-            NSApp.stopModal()
+            if let sheet = panel.attachedSheet {
+                panel.endSheet(sheet)
+            }
         }
         stashEditorText()
         let context = container.mainContext
@@ -131,28 +132,27 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         if panel.isVisible {
             panel.orderOut(nil)
         }
-        if activatedForPicker {
-            activatedForPicker = false
-            NSApp.deactivate()
-        }
     }
 
-    /// Opens the file picker and attaches what's chosen to the note showing. It's app-modal rather
-    /// than a sheet: with a sheet the main window stays editable while the panel holds a stale copy
-    /// of the note. The panel doesn't activate the app, but the picker needs it to take the keyboard.
+    /// Opens the file picker as a sheet on the panel and attaches what's chosen to the note showing. A sheet
+    /// shows wherever the panel is; app-modal it could open on another Space (e.g. under a full-screen app)
+    /// and block the panel unseen, which looked frozen.
     func pickFiles() {
         guard !isPickingFiles else { return }
         isPickingFiles = true
-        if !NSApp.isActive {
-            activatedForPicker = true
-            NSApp.activate()
-        }
-        Attachments.pickFiles(sheetFor: nil) { [weak self] urls in
+        Attachments.pickFiles(sheetFor: panel) { [weak self] urls in
             guard let self, isPickingFiles else { return }
             isPickingFiles = false
             draft.attachments += Attachments.add(urls)
-            panel.makeKeyAndOrderFront(nil)
+            focusPanel()
         }
+    }
+
+    /// Over a full-screen app `makeKeyAndOrderFront` shows the panel without making it key, so typing and
+    /// Esc went to the app underneath.
+    private func focusPanel() {
+        panel.orderFrontRegardless()
+        panel.makeKey()
     }
 
     /// Writes what's in the editor back to the note currently shown.
@@ -185,8 +185,6 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
     // Clicking anywhere outside the panel saves and closes it.
     func windowDidResignKey(_ notification: Notification) {
         guard !isPickingFiles else { return }
-        // The user clicked into another window: leave focus where they put it.
-        activatedForPicker = false
         commit()
     }
 

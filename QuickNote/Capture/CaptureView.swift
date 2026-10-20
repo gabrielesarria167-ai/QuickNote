@@ -52,7 +52,7 @@ struct CaptureView: View {
                 Text(draft.caption)
                     .monospacedDigit()
                 Spacer()
-                Text(draft.canBrowse ? "select text for more · . and - for older · esc saves" : "select text for more · esc saves")
+                Text(draft.canBrowse ? "select text for more · . - older · < z newer · esc saves" : "select text for more · esc saves")
             }
             .font(.caption)
             .foregroundStyle(.secondary)

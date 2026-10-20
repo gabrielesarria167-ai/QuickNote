@@ -68,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Attachments.removeOrphans(keeping: notes.flatMap(\.attachments))
         }
         voice.refreshUnsentCount()
+        SaveNotifier.showMainWindow = { [weak self] in self?.showMainWindow() }
         NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -78,6 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permission.whenGranted { [weak self] in
             self?.monitor.startGlobal()
         }
+    }
+
+    /// Opens the notes window; set by the menu bar icon, which has SwiftUI's `openWindow` and lives as long as the app.
+    var openMainWindow: (() -> Void)?
+
+    /// Brings up the notes window, reopening it if it was closed.
+    func showMainWindow() {
+        openMainWindow?()
+        NSApp.activate()
     }
 
     /// Brings up the Settings window.

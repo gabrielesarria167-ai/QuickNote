@@ -1,7 +1,7 @@
 import Foundation
 
 /// Detects two character keys pressed at the same time, e.g. `.` and `-`, without getting in the
-/// way of typing them one at a time.
+/// way of typing them one at a time. Several pairs can be watched; only keys of the same pair make a chord.
 ///
 /// A press of either key is held back for `window` seconds. If the other key goes down in that
 /// time it's a chord: both are swallowed, and so are their repeats and releases. Otherwise the
@@ -19,13 +19,13 @@ struct KeyChordDetector {
         case flushThenHold
         /// Deliver the press held earlier, then this one.
         case flushThenPass
-        /// The chord: drop the held press and this one.
-        case chord
+        /// The chord, with its two keys: drop the held press and this one.
+        case chord(Set<String>)
         /// Part of a chord already recognised: drop it.
         case swallow
     }
 
-    var keys: Set<String> = [".", "-"]
+    var chords: [Set<String>] = [[".", "-"]]
     var window: TimeInterval = 0.07
 
     /// Changes every time a press is held, so a timeout for an older one is ignored.
@@ -35,7 +35,7 @@ struct KeyChordDetector {
 
     /// - Parameter hasShortcutModifier: ⌘, ⌃ or ⌥ is held, so this is a shortcut, never the chord.
     mutating func keyDown(_ characters: String?, at timestamp: TimeInterval, isRepeat: Bool, hasShortcutModifier: Bool) -> Decision {
-        guard let key = characters, keys.contains(key), !hasShortcutModifier else {
+        guard let key = characters, chords.contains(where: { $0.contains(key) }), !hasShortcutModifier else {
             return releaseHeld() ? .flushThenPass : .pass
         }
         if chordKeys.contains(key) {
@@ -44,10 +44,10 @@ struct KeyChordDetector {
         if isRepeat {
             return releaseHeld() ? .flushThenPass : .pass
         }
-        if let held, held.key != key, timestamp - held.at <= window {
+        if let held, held.key != key, timestamp - held.at <= window, chords.contains([held.key, key]) {
             self.held = nil
             chordKeys = [held.key, key]
-            return .chord
+            return .chord(chordKeys)
         }
         let hadHeld = held != nil
         held = (key, timestamp)

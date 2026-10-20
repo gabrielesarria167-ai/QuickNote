@@ -4,11 +4,13 @@ import AppKit
 /// typing in stays frontmost underneath and gets focus back on close.
 final class CapturePanel: NSPanel {
     var onSubmit: (() -> Void)?
-    /// `.` and `-` pressed together: flip back to an older note.
-    var onFlip: (() -> Void)?
+    /// `.` and `-` pressed together flip back to an older note (1); `<` and `z` flip the other way (-1).
+    var onFlip: ((Int) -> Void)?
 
+    private static let olderChord: Set<String> = [".", "-"]
+    private static let newerChord: Set<String> = ["<", "z"]
     private var flipChord = KeyChordDetector()
-    /// A `.` or `-` press kept back while waiting to see if the other key joins it.
+    /// A `.`, `-`, `<` or `z` press kept back while waiting to see if the other key of its pair joins it.
     private var heldEvent: NSEvent?
 
     init(contentRect: NSRect) {
@@ -18,6 +20,7 @@ final class CapturePanel: NSPanel {
             backing: .buffered,
             defer: false
         )
+        flipChord.chords = [Self.olderChord, Self.newerChord]
         isFloatingPanel = true
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -36,8 +39,8 @@ final class CapturePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     // Keys are handled here, before the text view sees them: Esc and ⌘↩ save (the text view would
-    // otherwise swallow Esc for autocomplete and insert a newline for ⌘↩), and the `.` `-` chord
-    // flips notes without typing either character.
+    // otherwise swallow Esc for autocomplete and insert a newline for ⌘↩), and the `.` `-` and `<` `z`
+    // chords flip notes without typing either character.
     override func sendEvent(_ event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         switch event.type {
@@ -49,9 +52,9 @@ final class CapturePanel: NSPanel {
                 hasShortcutModifier: !modifiers.isDisjoint(with: [.command, .control, .option])
             )
             switch decision {
-            case .chord:
+            case .chord(let keys):
                 heldEvent = nil
-                onFlip?()
+                onFlip?(keys == Self.olderChord ? 1 : -1)
                 return
             case .swallow:
                 return
@@ -99,7 +102,7 @@ final class CapturePanel: NSPanel {
         }
     }
 
-    /// Types the held `.` or `-` after all.
+    /// Types the held key after all.
     private func deliverHeld() {
         guard let event = heldEvent else { return }
         heldEvent = nil
