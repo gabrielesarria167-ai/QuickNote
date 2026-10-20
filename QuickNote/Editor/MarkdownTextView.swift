@@ -276,6 +276,12 @@ final class MarkdownTextView: NSTextView {
 
     private static let attachmentTypes: [NSPasteboard.PasteboardType] = [.fileURL, .png, .tiff]
 
+    /// A chip dragged from an attachment strip and let go over a note: it's already attached, so a drop
+    /// would add a second copy. Drags from other apps have no source; text drags come from a text view.
+    private static func isAttachmentChip(_ info: any NSDraggingInfo) -> Bool {
+        info.draggingSource != nil && !(info.draggingSource is NSTextView)
+    }
+
     override func paste(_ sender: Any?) {
         if onAttach?(.general) == true { return }
         super.paste(sender)
@@ -286,10 +292,12 @@ final class MarkdownTextView: NSTextView {
     }
 
     override func dragOperation(for dragInfo: any NSDraggingInfo, type: NSPasteboard.PasteboardType) -> NSDragOperation {
-        onAttach != nil && Self.attachmentTypes.contains(type) ? .copy : super.dragOperation(for: dragInfo, type: type)
+        if Self.isAttachmentChip(dragInfo) { return [] }
+        return onAttach != nil && Self.attachmentTypes.contains(type) ? .copy : super.dragOperation(for: dragInfo, type: type)
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if Self.isAttachmentChip(sender) { return false }
         if onAttach?(sender.draggingPasteboard) == true { return true }
         return super.performDragOperation(sender)
     }

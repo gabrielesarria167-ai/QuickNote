@@ -68,6 +68,7 @@ private struct AttachmentChip: View {
             .padding(.horizontal, 6)
             .background(.quaternary, in: .rect(cornerRadius: 6))
             .contentShape(.rect)
+            .overlay(FileDragSource(url: url, onClick: open))
         }
         .buttonStyle(.plain)
         .overlay(alignment: .topTrailing) {
@@ -104,5 +105,65 @@ private struct AttachmentChip: View {
 
     private func open() {
         NSWorkspace.shared.open(url)
+    }
+}
+
+/// Lets a chip be dragged out to Finder, a chat, a terminal… as the file itself, and opens it on a plain
+/// click. AppKit because SwiftUI's `.onDrag` on a button never starts a drag (the button keeps the mouse),
+/// and a plain file URL is what browsers, Electron apps and terminals accept.
+private struct FileDragSource: NSViewRepresentable {
+    let url: URL
+    let onClick: () -> Void
+
+    func makeNSView(context: Context) -> SourceView { SourceView() }
+
+    func updateNSView(_ view: SourceView, context: Context) {
+        view.url = url
+        view.onClick = onClick
+    }
+
+    final class SourceView: NSView, NSDraggingSource {
+        var url: URL?
+        var onClick: (() -> Void)?
+        private var mouseDown: NSEvent?
+
+        // Left clicks only: right clicks and hovering still reach the chip's menu and remove button.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            NSApp.currentEvent?.type == .leftMouseDown ? super.hitTest(point) : nil
+        }
+
+        // Otherwise dragging a chip in the capture panel moves the panel.
+        override var mouseDownCanMoveWindow: Bool { false }
+
+        override func mouseDown(with event: NSEvent) {
+            mouseDown = event
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let down = mouseDown, let url,
+                  hypot(event.locationInWindow.x - down.locationInWindow.x,
+                        event.locationInWindow.y - down.locationInWindow.y) > 3
+            else { return }
+            mouseDown = nil
+            let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+            let point = convert(down.locationInWindow, from: nil)
+            item.setDraggingFrame(
+                NSRect(x: point.x - 16, y: point.y - 16, width: 32, height: 32),
+                contents: NSWorkspace.shared.icon(forFile: url.path)
+            )
+            beginDraggingSession(with: [item], event: down, source: self)
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            if mouseDown != nil {
+                onClick?()
+            }
+            mouseDown = nil
+        }
+
+        // Only out to other apps: dropped on a note here it would just attach a second copy.
+        func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+            context == .outsideApplication ? .copy : []
+        }
     }
 }

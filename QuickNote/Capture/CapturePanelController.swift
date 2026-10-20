@@ -203,10 +203,27 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         draft.caption = "Note \(number) of \(olderNotes.count) · \(age)"
     }
 
-    // Clicking anywhere outside the panel saves and closes it.
+    // Clicking anywhere outside the panel saves and closes it. But that click may be the start of dragging a
+    // file in from Finder, so wait for the mouse to come up: let go over the panel (a drop), it stays open.
     func windowDidResignKey(_ notification: Notification) {
         guard !isPickingFiles else { return }
-        commit()
+        guard NSEvent.pressedMouseButtons != 0 else {
+            commit()
+            return
+        }
+        let session = session
+        Task { @MainActor [weak self] in
+            while NSEvent.pressedMouseButtons != 0 {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            // Closed, reopened or focused again meanwhile: nothing left to decide.
+            guard let self, isOpen, self.session == session, !panel.isKeyWindow else { return }
+            if NSMouseInRect(NSEvent.mouseLocation, panel.frame, false) {
+                focusPanel()
+            } else {
+                commit()
+            }
+        }
     }
 
     /// Horizontally centred, in the upper part of the screen under the mouse.
