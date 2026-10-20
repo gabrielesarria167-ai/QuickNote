@@ -17,10 +17,13 @@ final class HotkeyMonitor {
     }
 
     /// Keys pressed in other apps. Requires the Accessibility permission, so call this only once it
-    /// has been granted.
+    /// has been granted. Calling it again replaces the monitor: one added before the permission was
+    /// turned off may not hear anything once it's back on.
     func startGlobal() {
-        guard globalMonitor == nil else { return }
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+        if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+        }
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: Self.events) { [weak self] event in
             MainActor.assumeIsolated { _ = self?.handle(event) }
         }
     }
@@ -29,16 +32,21 @@ final class HotkeyMonitor {
     /// same chord saves and closes it.
     func startLocal() {
         guard localMonitor == nil else { return }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: Self.events) { [weak self] event in
             let consumed = MainActor.assumeIsolated { self?.handle(event) } ?? false
             return consumed ? nil : event
         }
     }
 
+    /// Clicks count like key presses: ⌃⌥-click and ⌃⌥-drag are shortcuts too.
+    private static let events: NSEvent.EventTypeMask = [.keyDown, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+
     /// Returns true if the event was ⌃⌥R (repeats included). Only the local monitor can act on that (by dropping the event);
     /// a global monitor can't consume events.
     private func handle(_ event: NSEvent) -> Bool {
         switch event.type {
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            detector.keyPressed()
         case .keyDown:
             // First, so that any key cancels a ⌃⌥ tap in progress, ⌃⌥R included.
             detector.keyPressed()

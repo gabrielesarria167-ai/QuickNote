@@ -44,7 +44,7 @@ struct ModifierChordDetector {
         return false
     }
 
-    /// Feed every key press: pressing a key while the modifiers are held makes it a shortcut.
+    /// Feed every key press (and click): pressing a key while the modifiers are held makes it a shortcut.
     mutating func keyPressed() {
         if startedAt != nil {
             cancelled = true

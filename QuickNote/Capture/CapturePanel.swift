@@ -24,6 +24,7 @@ final class CapturePanel: NSPanel {
         isFloatingPanel = true
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        title = "QuickNote"  // hidden, but VoiceOver names the window by it
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         isMovableByWindowBackground = true
@@ -42,7 +43,8 @@ final class CapturePanel: NSPanel {
     // otherwise swallow Esc for autocomplete and insert a newline for ⌘↩), and the `.` `-` and `<` `z`
     // chords flip notes without typing either character.
     override func sendEvent(_ event: NSEvent) {
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        // Only the four real modifiers: Caps Lock and the keypad/fn flags don't count.
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
         switch event.type {
         case .keyDown:
             let decision = flipChord.keyDown(
@@ -70,7 +72,9 @@ final class CapturePanel: NSPanel {
             case .pass:
                 break
             }
-            let isEscape = event.keyCode == 53
+            // While a Japanese, Chinese or Korean word is being composed, Esc cancels it: leave that to the text view.
+            let isComposing = (firstResponder as? NSTextInputClient)?.hasMarkedText() == true
+            let isEscape = event.keyCode == 53 && !isComposing
             let isCommandReturn = (event.keyCode == 36 || event.keyCode == 76) && modifiers == .command
             if isEscape || isCommandReturn {
                 onSubmit?()

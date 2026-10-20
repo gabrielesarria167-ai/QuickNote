@@ -45,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : ModelConfiguration(url: try Self.storeURL())
             container = try ModelContainer(for: Note.self, configurations: configuration)
         } catch {
-            fatalError("Could not open the notes database: \(error)")
+            Self.quit(becauseNotesCantOpen: error)
         }
         super.init()
     }
@@ -53,11 +53,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `~/Library/Application Support/<bundle id>/Notes.store`. Outside the sandbox SwiftData's default
     /// is a `default.store` shared by every app, and the Debug build has its own bundle id so it gets
     /// its own notes.
+    private static let storeFolder = URL.applicationSupportDirectory
+        .appending(path: Bundle.main.bundleIdentifier ?? "com.gabrielesarria.quicknote", directoryHint: .isDirectory)
+
     private static func storeURL() throws -> URL {
-        let folder = URL.applicationSupportDirectory
-            .appending(path: Bundle.main.bundleIdentifier ?? "com.gabrielesarria.quicknote", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appending(path: "Notes.store")
+        try FileManager.default.createDirectory(at: storeFolder, withIntermediateDirectories: true)
+        return storeFolder.appending(path: "Notes.store")
+    }
+
+    /// The app can't work without its notes (a damaged store, a full disk): say so and where they are,
+    /// instead of crashing before any window shows up.
+    private static func quit(becauseNotesCantOpen error: Error) -> Never {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "QuickNote can't open your notes"
+        alert.informativeText = "\(error.localizedDescription)\n\nThey're in \(storeFolder.path). Nothing was changed."
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Show in Finder")
+        NSApplication.shared.activate()
+        if alert.runModal() == .alertSecondButtonReturn {
+            NSWorkspace.shared.activateFileViewerSelecting([storeFolder])
+        }
+        exit(1)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -109,6 +126,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             voice.saveForQuit()
         }
         return .terminateNow
+    }
+
+    // Quitting (log out, restart, an update) with the panel open would otherwise drop what's typed in it.
+    func applicationWillTerminate(_ notification: Notification) {
+        capture.commit()
     }
 
     // Keep running with no windows open so the shortcut keeps working.

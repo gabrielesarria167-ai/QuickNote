@@ -27,6 +27,7 @@ struct CaptureView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             FormattedTextEditor(text: $draft.text, fontSize: 16, focusToken: draft.session, onAttach: attach)
+                .accessibilityLabel("Note text")
                 .overlay(alignment: .topLeading) {
                     if draft.text.isEmpty && draft.attachments.isEmpty {
                         Text("What's the idea?")
@@ -35,6 +36,7 @@ struct CaptureView: View {
                             .padding(.leading, 5)
                             .padding(.top, 2)
                             .allowsHitTesting(false)
+                            .accessibilityHidden(true)
                     }
                 }
 

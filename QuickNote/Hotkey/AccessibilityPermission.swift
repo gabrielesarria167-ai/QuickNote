@@ -12,22 +12,24 @@ final class AccessibilityPermission {
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
     /// Runs `action` as soon as the permission is granted, showing the system
-    /// prompt first if it hasn't been granted yet.
+    /// prompt first if it hasn't been granted yet, and again each time it's turned back on.
     func whenGranted(_ action: @escaping @MainActor () -> Void) {
         if isGranted {
             action()
-            return
+        } else {
+            requestPrompt()
         }
-        requestPrompt()
         pollTask?.cancel()
+        // Keeps checking once granted: the permission can be turned off (and on again) while the app runs.
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
-                if AXIsProcessTrusted() {
-                    self.isGranted = true
+                let trusted = AXIsProcessTrusted()
+                guard trusted != self.isGranted else { continue }
+                self.isGranted = trusted
+                if trusted {
                     action()
-                    return
                 }
             }
         }
