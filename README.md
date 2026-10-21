@@ -160,6 +160,19 @@ the same ⌃⌥.
 
 Notes live in `~/Library/Application Support/<bundle id>/Notes.store`.
 
+## iPhone
+The **QuickNote iOS** scheme builds a phone app that opens on a blank note with the keyboard up. Its notes
+stay on the phone for now (no sync with the Mac). The ⌃⌥ stand-in is the **New Quick Note** shortcut:
+- **Action Button** (iPhone 15 Pro and later): Settings → Action Button → Shortcut → QuickNote → New Quick Note.
+- **Back Tap** (any iPhone): Settings → Accessibility → Touch → Back Tap → Double Tap → New Quick Note.
+- Or Siri: "New quick note in QuickNote".
+
+To install with a free Apple ID: Xcode → Settings → Accounts → add it; in the QuickNote iOS target's
+Signing & Capabilities pick your Personal Team; plug in the phone and run. On the phone, turn on Developer
+Mode and trust the developer (Settings → General → VPN & Device Management). Free installs stop opening
+after 7 days; run from Xcode again to renew. The shortcut needs a signing team: in a simulator build signed
+without one, iOS answers "Couldn't find shortcut".
+
 ## Releasing
 1. Bump `MARKETING_VERSION` in the QuickNote target's build settings.
 2. `./build.sh --release` (refuses to build without the "QuickNote Signing" certificate, so every release keeps

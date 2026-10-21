@@ -18,7 +18,7 @@ final class Note {
 
     /// First non-empty line, used as the note's title in lists; an attachment-only note uses its first file's name.
     var title: String {
-        lines.first ?? attachments.first.map(Attachments.displayName) ?? "New Note"
+        lines.first ?? attachments.first.map { ($0 as NSString).lastPathComponent } ?? "New Note"
     }
 
     /// Second non-empty line, shown under the title in the sidebar.
