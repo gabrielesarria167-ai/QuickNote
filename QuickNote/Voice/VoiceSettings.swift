@@ -43,6 +43,7 @@ final class VoiceSettings {
 
     private static let modelKey = "geminiModel"
     private static let languageKey = "onDeviceLanguage"
+    private static let systemAudioKey = "captureSystemAudio"
 
     /// The model id as typed or picked. Use `model` to send a request.
     var geminiModel: String {
@@ -60,6 +61,12 @@ final class VoiceSettings {
         }
     }
 
+    /// Also record what the Mac is playing, so a call's other side is transcribed. Off by default:
+    /// it needs its own permission and picks up everything that plays.
+    var captureSystemAudio: Bool {
+        didSet { defaults.set(captureSystemAudio, forKey: Self.systemAudioKey) }
+    }
+
     /// Whether a key is stored. Refreshed by `refreshKeyState`, `saveKey` and `removeKey`; it is not
     /// looked up when the settings are created, so nothing touches the Keychain until it is needed.
     private(set) var hasGeminiKey = false
@@ -75,6 +82,7 @@ final class VoiceSettings {
         self.defaults = defaults
         geminiModel = defaults.string(forKey: Self.modelKey) ?? Self.defaultModel
         onDeviceLanguage = defaults.string(forKey: Self.languageKey)
+        captureSystemAudio = defaults.bool(forKey: Self.systemAudioKey)
     }
 
     /// The model to send requests to: `geminiModel` without surrounding whitespace, or the default

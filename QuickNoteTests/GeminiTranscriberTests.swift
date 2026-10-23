@@ -94,9 +94,29 @@ struct GeminiTranscriberTests {
         #expect(fake.requests.count == 2)
     }
 
-    @Test func aServerErrorIsRetriedOnlyOnce() async {
+    @Test func aServerErrorIsRetriedOnceThenTriedOnTheFallbackModel() async {
         let fake = FakeTransport([.answer(status: 503, body: "{}")])
         #expect(await failure(fake) == .server)
+        #expect(fake.requests.count == 3)
+        #expect(fake.requests[1].url?.path.contains("gemini-3.8-flash") == true)
+        #expect(fake.requests[2].url?.path.contains(GeminiTranscriber.fallbackModel) == true)
+    }
+
+    @Test func theFallbackModelCanSaveTheRecording() async throws {
+        let fake = FakeTransport([.answer(status: 503, body: "{}"), .answer(status: 503, body: "{}"), Self.good])
+        let result = try await transcribe(fake)
+        #expect(result.transcript == "Buy tickets.")
+    }
+
+    @Test func theFallbackModelIsNotTriedAgainWhenItIsTheChosenOne() async throws {
+        let fake = FakeTransport([.answer(status: 503, body: "{}")])
+        let url = FileManager.default.temporaryDirectory.appending(path: "GeminiTranscriberTests-\(UUID().uuidString).aac")
+        try Data(repeating: 7, count: 1000).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let transcriber = GeminiTranscriber(transport: fake.transport, retryDelay: .zero)
+        await #expect(throws: GeminiError.server) {
+            try await transcriber.transcribe(audioURL: url, duration: 12, apiKey: "k", model: GeminiTranscriber.fallbackModel)
+        }
         #expect(fake.requests.count == 2)
     }
 
@@ -138,10 +158,12 @@ struct GeminiTranscriberTests {
         }
     }
 
-    @Test func aTimeoutIsAServerErrorAndNotRetried() async {
+    @Test func aTimeoutIsNotRetriedButFallsBackToTheOtherModel() async throws {
         let fake = FakeTransport([.failure(.timedOut), Self.good])
-        #expect(await failure(fake) == .server)
-        #expect(fake.requests.count == 1)
+        let result = try await transcribe(fake)
+        #expect(result.transcript == "Buy tickets.")
+        #expect(fake.requests.count == 2)
+        #expect(fake.requests[1].url?.path.contains(GeminiTranscriber.fallbackModel) == true)
     }
 
     @Test func aCancelledRequestThrowsCancellation() async throws {

@@ -172,10 +172,11 @@ final class VoiceCaptureController {
         settings.refreshKeyState()
         let recordAudio = settings.hasGeminiKey
         let language = settings.onDeviceLanguage
+        let captureSystemAudio = settings.captureSystemAudio
         Task {
             guard id == startID else { return }
             do {
-                try await recorder.start(recordAudio: recordAudio, language: language)
+                try await recorder.start(recordAudio: recordAudio, language: language, captureSystemAudio: captureSystemAudio)
                 // After the microphone and speech prompts, so they don't pile up.
                 SaveNotifier.shared.requestPermission()
             } catch is CancellationError {

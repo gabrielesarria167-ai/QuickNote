@@ -16,6 +16,14 @@ struct VoiceSettingsTests {
         #expect(settings.model == "gemini-3.8-flash")
         #expect(settings.onDeviceLanguage == nil)
         #expect(!settings.hasGeminiKey)
+        #expect(!settings.captureSystemAudio)
+    }
+
+    @Test func recordingTheMacsAudioIsKept() {
+        let (settings, defaults) = makeSettings()
+        settings.captureSystemAudio = true
+        let (reopened, _) = makeSettings(defaults: defaults)
+        #expect(reopened.captureSystemAudio)
     }
 
     @Test func settingsAreKeptInDefaults() {

@@ -8,6 +8,8 @@ enum VoiceRecorderError: LocalizedError {
     case speechDenied
     case recognizerUnavailable
     case noInputDevice
+    /// Recording the Mac's own audio failed to start, usually because that permission is off.
+    case systemAudioUnavailable
     /// The microphone went away or changed during the recording.
     case inputLost
     /// The recognizer failed again and again. What was heard before is saved.
@@ -25,6 +27,8 @@ enum VoiceRecorderError: LocalizedError {
             "Speech recognition isn't available for your language right now."
         case .noInputDevice:
             "No microphone could be opened. Check that one is connected."
+        case .systemAudioUnavailable:
+            "Allow QuickNote under System Settings → Privacy & Security → Screen & System Audio Recording → System Audio Recording Only, or turn off \"Record the Mac's audio\" in Settings."
         case .inputLost:
             "The microphone stopped working. What was said so far has been saved."
         case .recognitionStopped:
@@ -41,6 +45,8 @@ enum VoiceRecorderError: LocalizedError {
             URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
         case .speechDenied:
             URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")
+        case .systemAudioUnavailable:
+            URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture")
         default:
             nil
         }

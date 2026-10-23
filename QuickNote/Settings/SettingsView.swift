@@ -65,6 +65,14 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Record the Mac's audio", isOn: $settings.captureSystemAudio)
+            } header: {
+                Text("Calls")
+            } footer: {
+                Text("Also transcribes what you hear, such as the other person on a WhatsApp, FaceTime or Zoom call. It picks up everything the Mac plays, so use headphones, or your microphone will hear the speakers too. macOS asks for permission the first time. Tell the other person you're recording.")
+            }
+
+            Section {
                 Picker("Language", selection: $settings.onDeviceLanguage) {
                     Text("Automatic").tag(String?.none)
                     ForEach(languages) { language in

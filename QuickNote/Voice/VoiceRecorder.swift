@@ -71,6 +71,8 @@ final class VoiceRecorder {
 
     @ObservationIgnored private let box = RequestBox()
     @ObservationIgnored private var engine: AVAudioEngine?
+    /// The Mac's own audio joined with the microphone, while recording with `captureSystemAudio`.
+    @ObservationIgnored private var systemTap: SystemAudioTap?
     @ObservationIgnored private var recognizer: SFSpeechRecognizer?
     @ObservationIgnored private var ticker: Task<Void, Never>?
     @ObservationIgnored private var configurationObserver: NSObjectProtocol?
@@ -88,7 +90,7 @@ final class VoiceRecorder {
     /// With `recordAudio` the audio is also saved to a file for Gemini. `language` is the on-device
     /// language chosen in Settings (nil for the system's). Throws a `VoiceRecorderError` (or
     /// `CancellationError` if `cancel()` was called meanwhile).
-    func start(recordAudio: Bool = false, language: String? = nil) async throws {
+    func start(recordAudio: Bool = false, language: String? = nil, captureSystemAudio: Bool = false) async throws {
         guard state == .idle else { return }
         state = .starting
         chosenLanguage = language
@@ -100,18 +102,23 @@ final class VoiceRecorder {
             let speechAllowed = await SpeechPermissions.speech()
             guard id == recordingID else { throw CancellationError() }
             guard speechAllowed else { throw VoiceRecorderError.speechDenied }
-            try beginListening(recordAudio: recordAudio)
+            try beginListening(recordAudio: recordAudio, captureSystemAudio: captureSystemAudio)
         } catch {
             if id == recordingID { cancel() }
             throw error
         }
     }
 
-    private func beginListening(recordAudio: Bool) throws {
+    private func beginListening(recordAudio: Bool, captureSystemAudio: Bool) throws {
         guard let recognizer = Self.makeRecognizer(chosen: chosenLanguage), recognizer.isAvailable else {
             throw VoiceRecorderError.recognizerUnavailable
         }
         let engine = AVAudioEngine()
+        if captureSystemAudio {
+            let tap = try SystemAudioTap()
+            try tap.route(engine)
+            systemTap = tap
+        }
         let format = engine.inputNode.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw VoiceRecorderError.noInputDevice }
 
@@ -214,6 +221,7 @@ final class VoiceRecorder {
         engine?.stop()
         engine?.inputNode.removeTap(onBus: 0)
         engine = nil
+        systemTap = nil
         box.swapWriter(nil)
         box.swap(to: nil)?.endAudio()
     }

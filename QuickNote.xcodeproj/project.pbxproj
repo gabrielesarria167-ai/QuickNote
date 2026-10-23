@@ -327,6 +327,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "QuickNote Dev";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSAudioCaptureUsageDescription = "QuickNote records the Mac's audio, such as the other person on a call, when you turn on \"Record the Mac's audio\" in Settings.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "QuickNote listens while you record a voice note. If you add a Gemini API key, the recording is sent to Google to be transcribed.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "QuickNote turns your voice notes into text, on your Mac when possible.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -358,6 +359,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = QuickNote;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSAudioCaptureUsageDescription = "QuickNote records the Mac's audio, such as the other person on a call, when you turn on \"Record the Mac's audio\" in Settings.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "QuickNote listens while you record a voice note. If you add a Gemini API key, the recording is sent to Google to be transcribed.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "QuickNote turns your voice notes into text, on your Mac when possible.";
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -10,9 +10,11 @@ struct GeminiTranscriber: Sendable {
     var transport: Transport = GeminiTranscriber.urlSessionTransport
     /// How long to wait before the one retry after a quota or server error.
     var retryDelay: Duration = .seconds(2)
+    /// The model tried once more when the chosen one stays overloaded or out of quota.
+    static let fallbackModel = "gemini-3.5-flash-lite"
 
     /// Transcribes the audio file, with one retry after `retryDelay` if Gemini says it is busy
-    /// (`.quota`, `.server`). Reads the file and builds the request off the main actor.
+    /// (`.quota`, `.server`), then one more try on `fallbackModel` if that still fails the same way. Reads the file and builds the request off the main actor.
     ///
     /// Throws `GeminiError` for every failure Gemini or the network can cause (an unreadable or empty
     /// file is `.empty`, a recording too big for one request even as AAC `.tooLarge`), and
@@ -33,25 +35,36 @@ struct GeminiTranscriber: Sendable {
         guard GeminiLimits.fitsInline(audioBytes: audio.count) else {
             throw GeminiError.tooLarge
         }
-        let body = try? GeminiRequest.body(
-            audio: audio,
-            mimeType: prepared.mimeType,
-            prompt: GeminiRequest.prompt,
-            maxOutputTokens: GeminiLimits.maxOutputTokens(forAudioSeconds: duration, model: model),
-            model: model
-        )
-        guard let body else { throw GeminiError.malformed }
-        let request = GeminiRequest.urlRequest(
-            model: model,
-            apiKey: apiKey,
-            body: body,
-            timeout: GeminiLimits.timeout(forAudioSeconds: duration)
-        )
+        func makeRequest(model: String) -> URLRequest? {
+            let body = try? GeminiRequest.body(
+                audio: audio,
+                mimeType: prepared.mimeType,
+                prompt: GeminiRequest.prompt,
+                maxOutputTokens: GeminiLimits.maxOutputTokens(forAudioSeconds: duration, model: model),
+                model: model
+            )
+            return body.map {
+                GeminiRequest.urlRequest(
+                    model: model,
+                    apiKey: apiKey,
+                    body: $0,
+                    timeout: GeminiLimits.timeout(forAudioSeconds: duration)
+                )
+            }
+        }
+        guard let request = makeRequest(model: model) else { throw GeminiError.malformed }
 
         var outcome = try await attempt(request)
         if outcome.mayRetry {
             try await Task.sleep(for: retryDelay)
             outcome = try await attempt(request)
+        }
+        // A request that timed out is `.server` too, so the fallback also covers a model that hangs.
+        if case .failure(let error) = outcome.result, error == .quota || error == .server,
+           GeminiRequest.normalizedModel(model) != Self.fallbackModel,
+           let fallback = makeRequest(model: Self.fallbackModel) {
+            let second = try await attempt(fallback)
+            if case .success = second.result { outcome = second }
         }
         return try outcome.result.get()
     }

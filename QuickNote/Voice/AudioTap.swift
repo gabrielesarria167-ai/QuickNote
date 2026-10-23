@@ -50,8 +50,26 @@ final class RequestBox: @unchecked Sendable {
         }
     }
 
+    /// The microphone and the Mac's audio arrive as separate channels of one aggregate device; the
+    /// recognizer and the file want one, so they are summed (clamped against clipping).
+    private static func mono(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer {
+        let channels = Int(buffer.format.channelCount)
+        guard channels > 1, let source = buffer.floatChannelData,
+              let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: buffer.format.sampleRate, channels: 1, interleaved: false),
+              let result = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: buffer.frameLength),
+              let target = result.floatChannelData?[0] else { return buffer }
+        result.frameLength = buffer.frameLength
+        for frame in 0..<Int(buffer.frameLength) {
+            var sum: Float = 0
+            for channel in 0..<channels { sum += source[channel][frame] }
+            target[frame] = max(-1, min(1, sum))
+        }
+        return result
+    }
+
     /// Audio thread. The level comes from the first channel.
-    private func append(_ buffer: AVAudioPCMBuffer) {
+    private func append(_ input: AVAudioPCMBuffer) {
+        let buffer = Self.mono(input)
         var rms: Float = 0
         if let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 {
             var sum: Float = 0
