@@ -10,10 +10,17 @@ final class HotkeyMonitor {
     private var localMonitor: Any?
     private let onTrigger: @MainActor () -> Void
     private let onRecord: @MainActor () -> Void
+    /// A key went to another app.
+    private let onKeyElsewhere: @MainActor () -> Void
 
-    init(onTrigger: @escaping @MainActor () -> Void, onRecord: @escaping @MainActor () -> Void) {
+    init(
+        onTrigger: @escaping @MainActor () -> Void,
+        onRecord: @escaping @MainActor () -> Void,
+        onKeyElsewhere: @escaping @MainActor () -> Void
+    ) {
         self.onTrigger = onTrigger
         self.onRecord = onRecord
+        self.onKeyElsewhere = onKeyElsewhere
     }
 
     /// Keys pressed in other apps. Requires the Accessibility permission, so call this only once it
@@ -24,7 +31,13 @@ final class HotkeyMonitor {
             NSEvent.removeMonitor(globalMonitor)
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: Self.events) { [weak self] event in
-            MainActor.assumeIsolated { _ = self?.handle(event) }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                _ = self.handle(event)
+                if event.type == .keyDown {
+                    self.onKeyElsewhere()
+                }
+            }
         }
     }
 

@@ -16,6 +16,8 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
     private var newNoteAttachments: [String] = []
     /// While the file picker is up the panel isn't key, which must not save and close it.
     private var isPickingFiles = false
+    /// Whether the app was activated only to get the keyboard back, so closing gives focus back.
+    private var activatedForKeyboard = false
     /// Existing notes, newest first, loaded each time the panel opens.
     private var olderNotes: [Note] = []
     /// 0 is the new note; `n` is `olderNotes[n - 1]`.
@@ -149,8 +151,14 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
         editedNotes = []
         draft.text = ""
         draft.attachments = []
+        // Read first: hiding the panel resigns key, and `windowDidResignKey` clears the flag.
+        let giveBackKeyboard = activatedForKeyboard
+        activatedForKeyboard = false
         if panel.isVisible {
             panel.orderOut(nil)
+        }
+        if giveBackKeyboard {
+            NSApp.deactivate()
         }
     }
 
@@ -173,6 +181,16 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
     private func focusPanel() {
         panel.orderFrontRegardless()
         panel.makeKey()
+    }
+
+    /// A key reached another app while the panel is key. Sometimes the window server doesn't hand a
+    /// non-activating panel the keyboard although AppKit made it key: the caret blinks but typing goes
+    /// elsewhere. Activating the app makes it take the keyboard for real; `commit()` hands it back.
+    func reclaimKeyboard() {
+        guard panel.isVisible, panel.isKeyWindow, !NSApp.isActive else { return }
+        activatedForKeyboard = true
+        NSApp.activate(ignoringOtherApps: true)  // plain activate() can be declined for a background app
+        focusPanel()
     }
 
     /// Writes what's in the editor back to the note currently shown.
@@ -207,6 +225,8 @@ final class CapturePanelController: NSObject, NSWindowDelegate {
     // file in from Finder, so wait for the mouse to come up: let go over the panel (a drop), it stays open.
     func windowDidResignKey(_ notification: Notification) {
         guard !isPickingFiles else { return }
+        // Clicked into another app: leave focus where it was put.
+        activatedForKeyboard = false
         guard NSEvent.pressedMouseButtons != 0 else {
             commit()
             return

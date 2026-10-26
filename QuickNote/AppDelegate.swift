@@ -32,7 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var needsCentering = true
     private lazy var monitor = HotkeyMonitor(
         onTrigger: { [weak self] in self?.capture.toggle() },
-        onRecord: { [weak self] in self?.voice.toggle() }
+        onRecord: { [weak self] in self?.voice.toggle() },
+        onKeyElsewhere: { [weak self] in self?.capture.reclaimKeyboard() }
     )
 
     private static let isRunningTests =
